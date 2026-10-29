@@ -1,0 +1,279 @@
+.site-entrance {
+  visibility: hidden;
+}
+.site-entrance-visible {
+  visibility: visible;
+  animation: site-arrives 0.5s ease-out both;
+}
+.site-entrance[inert] {
+  pointer-events: none;
+}
+.opening {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  isolation: isolate;
+  overflow: hidden;
+  background: #f5f4ee;
+}
+.opening-position {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(248px, 24vw, 310px);
+  transform: translate(-50%, -50%);
+}
+.opening-spark {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+/* All movement is on SVG group attributes in one rig. Never squeeze a whole silhouette. */
+.opening-profile {
+  opacity: 1;
+  transition: opacity 0.26s ease;
+}
+.opening-front {
+  opacity: 0;
+  transition: opacity 0.32s ease 0.08s;
+}
+.opening-turning .opening-profile,
+.opening-bloom .opening-profile,
+.opening-revealing .opening-profile {
+  opacity: 0;
+}
+.opening-turning .opening-front,
+.opening-bloom .opening-front,
+.opening-revealing .opening-front {
+  opacity: 1;
+}
+.opening-facing .opening-profile {
+  opacity: 0;
+}
+.opening-facing .opening-front {
+  opacity: 1;
+}
+.opening-light {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100vw;
+  height: 100dvh;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    #f0fbff 0%,
+    #b4e5ff 11%,
+    #63b7f099 28%,
+    #3e9be25c 46%,
+    #7fc5f524 68%,
+    #a8dcfa10 88%
+  );
+  mask-image: radial-gradient(circle, #000 0%, #000 38%, transparent 68%);
+  mask-size: 0vmax 0vmax;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  opacity: 0;
+  pointer-events: none;
+}
+.opening-position {
+  z-index: 1;
+}
+.opening-bloom .opening-light {
+  animation: viewport-bloom 0.95s cubic-bezier(0.15, 0.65, 0.3, 1) both;
+}
+.opening-bloom .opening-position {
+  animation: character-into-light 0.8s ease-in both;
+}
+.opening-revealing .opening-light {
+  mask-size: 300vmax 300vmax;
+  opacity: 1;
+}
+.opening-revealing {
+  background: transparent;
+  animation: opening-dissolves 0.65s ease-in-out both;
+  pointer-events: none;
+}
+.opening-revealing .opening-position {
+  opacity: 0;
+}
+.opening-skip {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  min-width: 80px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #c5cdb9;
+  border-radius: 8px;
+  background: #fffdf5;
+  color: #465c3e;
+  font:
+    12px "Segoe UI",
+    sans-serif;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 3;
+}
+.opening-skip:hover,
+.opening-skip:focus-visible {
+  opacity: 1;
+  outline: 2px solid #8f9d70;
+  outline-offset: 3px;
+}
+main:focus {
+  outline: none;
+}
+@keyframes viewport-bloom {
+  0% {
+    opacity: 0;
+    mask-size: 0vmax 0vmax;
+  }
+  15% {
+    opacity: 1;
+    mask-size: 20vmax 20vmax;
+  }
+  65%,
+  100% {
+    opacity: 1;
+    mask-size: 300vmax 300vmax;
+  }
+}
+@keyframes character-into-light {
+  0%,
+  18% {
+    opacity: 1;
+  }
+  78%,
+  100% {
+    opacity: 0.58;
+  }
+}
+@keyframes opening-dissolves {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes site-arrives {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  .opening-position {
+    width: 230px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-entrance-visible {
+    animation: none;
+  }
+  .opening,
+  .opening * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* A single soft expanding halo carries the energy outwards, without a blank hold. */
+.opening-light::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14vmin;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid #59b5ed70;
+  box-shadow:
+    0 0 28px #7acbf480,
+    inset 0 0 20px #a1def940;
+  transform: translate(-50%, -50%) scale(0.5);
+  opacity: 0;
+}
+.opening-bloom .opening-light::after {
+  animation: expanding-halo 0.95s ease-out both;
+}
+@keyframes expanding-halo {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(18);
+    opacity: 0;
+  }
+}
+/* Side-view-only refinements. Original frontal feet and eye return through the turn. */
+.opening-near-eye {
+  rx: 6.6;
+  ry: 7.2;
+  transition:
+    rx 0.32s ease,
+    ry 0.32s ease;
+}
+.opening-turning .opening-leg-profile,
+.opening-facing .opening-leg-profile,
+.opening-bloom .opening-leg-profile,
+.opening-revealing .opening-turning .opening-leg-front,
+.opening-facing .opening-leg-front,
+.opening-bloom .opening-leg-front,
+.opening-revealing .opening-turning .opening-near-eye,
+.opening-facing .opening-near-eye,
+.opening-bloom .opening-near-eye,
+.opening-revealing .opening-near-eye {
+  rx: 5.6;
+  ry: 8.4;
+}
+
+.opening-3d-position {
+  position: fixed;
+  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  pointer-events: none;
+}
+.opening-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.opening-jelly-material {
+  pointer-events: none;
+}
+.opening-inner-bubbles {
+  opacity: 0.78;
+}
+.jelly-twinkle {
+  opacity: 0.35;
+  animation: jelly-light-catch 3.6s ease-in-out infinite;
+}
+.jelly-twinkle-b {
+  animation-delay: -1.3s;
+}
+.jelly-twinkle-c {
+  animation-delay: -2.4s;
+}
+@keyframes jelly-light-catch {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}

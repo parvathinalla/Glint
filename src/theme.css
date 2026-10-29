@@ -1,0 +1,296 @@
+:root {
+  color-scheme: dark;
+  color: #edf4ff;
+  background: #080d15;
+  --green: #69b3ff;
+  --muted: #a4b8d2;
+  --border: #2a3a51;
+  --cream: #080d15;
+}
+body,
+.app-shell,
+.app-shell > main,
+.opening {
+  background: #080d15;
+  color: #edf4ff;
+}
+.topbar {
+  background: #080d15;
+  border-color: #223047;
+}
+.topbar .brand,
+.topbar .brand > span,
+.modal h2,
+.companion-stage h1 {
+  color: #edf4ff;
+}
+.brand-dot {
+  color: #69b3ff;
+}
+a,
+.text-button,
+.green,
+.icon-button,
+.step-card summary,
+.step-card .text-button {
+  color: #8ac3ff;
+}
+.app-shell .button {
+  background: #111d2d;
+  color: #e0eeff;
+  border-color: #2d435f;
+}
+.app-shell .button:hover {
+  background: #1a2e46;
+  border-color: #548cc5;
+}
+.app-shell .button.primary,
+.chat-form > button {
+  background: #1467c7;
+  border-color: #287ddd;
+  color: #ffffff;
+}
+.app-shell .button.primary:hover {
+  background: #1b72d7;
+}
+.app-shell .button.recording {
+  background: #a93742;
+  border-color: #d4646e;
+}
+.icon-button:hover,
+.icon-button.enabled {
+  background: #182b43;
+  color: #a5d2ff;
+}
+.app-shell :is(input, textarea, select),
+.modal :is(input, textarea, select) {
+  background: #0a1320;
+  color: #edf4ff;
+  border-color: #30445f;
+}
+.app-shell :is(input, textarea, select):focus {
+  border-color: #66b0ff;
+  box-shadow: 0 0 0 3px #153258;
+}
+input::placeholder,
+textarea::placeholder,
+.chat-form input::placeholder {
+  color: #a4b8d2 !important;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline-color: #75bdff;
+}
+.companion-input {
+  background: #101b2b;
+  border-color: #30445f;
+}
+.companion-input input {
+  background: transparent;
+}
+.companion-stage > p,
+.companion-note,
+.conversation-greeting,
+.companion-example span,
+.companion-message > span,
+.companion-wait {
+  color: #adc1da;
+}
+.section-title > .eyebrow, .section-title > span { color: #adc1da; }
+.companion-message {
+  background: #101b2b;
+  color: #edf4ff;
+  border-color: #263c57;
+}
+.companion-message.from-you {
+  background: #122b49;
+  border-color: #2b5078;
+}
+.companion-camera {
+  background: #101b2b;
+  border: 1px solid #2b4464;
+}
+.live-caption {
+  background: #0a1424;
+  color: #edf4ff;
+}
+.modal {
+  background: #101925;
+  color: #e6f0ff;
+  border-color: #30445f;
+  box-shadow: 0 25px 100px #000a;
+}
+.modal::backdrop {
+  background: #010610c9;
+}
+.modal :is(label, h3, h4, strong),
+.connected-key > p {
+  color: #e6f0ff;
+}
+.modal .field-help,
+.modal-intro,
+.modal .source-text,
+.modal .source-steps,
+.source-steps small,
+.modal > p:not(.modal-intro):not(.field-help):not(.billing-note),
+.modal .about-list,
+.connection-details {
+  color: #adc1da !important;
+}
+.modal form > input + .button {
+  margin-top: 16px;
+}
+.notice,
+.notice.compact {
+  background: #12243a;
+  color: #c4ddfa;
+  border-color: #2c4c72;
+}
+.notice.error {
+  background: #2c1821;
+  color: #ffbfad;
+  border-color: #6c3c48;
+}
+.notice.error .text-button {
+  color: #b9dbff;
+}
+.conversation,
+.step-card,
+.confirm-source,
+.source-editor {
+  background: #101b2b;
+  color: #edf4ff;
+  border-color: #2a3a51;
+}
+.conversation > header,
+.conversation > footer,
+.step-list li,
+.report-button,
+.chat-form {
+  border-color: #2a3a51;
+}
+.conversation :is(h2, h3),
+.step-card :is(h2, h3),
+.workspace-heading h1 {
+  color: #edf4ff;
+}
+.initial-message p,
+.message p,
+.evidence,
+.evidence p {
+  color: #dce9fa;
+}
+.message-you {
+  background: #122b49;
+  color: #edf4ff;
+  border-color: #2b5078;
+}
+.message-glint,
+.initial-message,
+.chat-form {
+  background: #101b2b;
+}
+.companion span,
+.conversation > footer,
+.workspace-footer,
+.message-label,
+.message-label > span,
+.evidence summary,
+.evidence small,
+.step-list small,
+.step-card p,
+.step-list li,
+.workspace-heading > div > p:last-child,
+.confirm-source p,
+.camera-bottom,
+.camera-status,
+.mode-label,
+.mode-row .text-button,
+.step-number,
+.optional,
+.chip,
+.chip.light {
+  color: #adc1da;
+}
+.step-number,
+.step-check,
+.chip,
+.chip.light,
+.section-icon,
+.interrupt {
+  background: #152d49;
+  border-color: #36577e;
+}
+.step-check.done {
+  background: #1467c7;
+  border-color: #3986de;
+  color: #fff;
+}
+.progress-track,
+.progress-track::-webkit-progress-bar {
+  background: #24344d;
+}
+.progress-track::-webkit-progress-value {
+  background: #4fa4ff;
+}
+.progress-track::-moz-progress-bar {
+  background: #4fa4ff;
+}
+.camera-card,
+.camera-placeholder {
+  background: #0b1421;
+  color: #e6f0ff;
+  border-color: #2a3a51;
+}
+.camera-placeholder :is(h2, p, span),
+.camera-top,
+.camera-bottom {
+  color: #b6cbe4;
+}
+.replay-label {
+  background: #142842;
+  color: #c4ddfa;
+}
+.opening-skip {
+  background: #12243a;
+  color: #e6f0ff;
+  border-color: #42668d;
+}
+.message-composer {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.message-composer .companion-input {
+  flex: 1;
+  min-width: 0;
+}
+.message-composer .companion-input input {
+  min-width: 0;
+}
+.message-composer .talk-button {
+  align-self: stretch;
+  gap: 8px;
+  padding: 12px 16px;
+  white-space: nowrap;
+  border-radius: 14px;
+}
+@media (max-width: 600px) {
+  .message-composer {
+    gap: 8px;
+  }
+  .message-composer .talk-button {
+    width: 54px;
+    padding: 12px;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .talk-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}

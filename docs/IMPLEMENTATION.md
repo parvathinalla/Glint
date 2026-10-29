@@ -1,0 +1,33 @@
+# Implementation status
+
+October 28, 2026
+
+The local checkpoint slice implements parts of the design, not the entire proposed production platform. The design documents remain the future direction; this status file and TEST_REPORT describe present behavior.
+
+## Implemented
+
+Current visual-awareness update supersedes the one-image-only companion descriptions below. Camera-on idle observation sends up to six chronological frames from the latest eight seconds to Muse, targeted every six seconds with one in-flight job. Structured scene/activity/change summaries stay in session memory and inform the next conversation. Questions also include frame history. Recent local pose events are supplied as estimated evidence. Confidence and cooldowns limit proactive speech. Voice interrupts background observation; stopping camera cancels it and clears visual context. Local MediaPipe Pose Landmarker Lite, pinned SDK/model, performs pose tracking in a worker. Fast person/hand-rise responses complement general Muse activity interpretation; they are not the only recognized activities. See VISUAL_AWARENESS.md for rates, limitations and verification.
+
+
+Latest voice implementation supersedes push-to-talk below: `shared/voice-turn.ts` locally detects utterances from a persistent AudioWorklet microphone session. Silence dispatches nothing; completed turns are converted to bounded mono WAV and transcribed by Meta. `POST /api/agent/stream` forwards only visible Responses text events to the browser, with a terminal validated response or sanitized error. Complete phrases are spoken while more text arrives. A new detected utterance can interrupt reply generation/read-aloud, await the cancellation epoch, and start another turn. End voice, background, disconnect and unmount release microphone resources. Opening camera starts voice too when a model is connected.
+
+Companion snapshot replies now require fresh images at dispatch but retain delayed answers, prefixed and labeled as captured-image observations. They never become live activity verification. The separate legacy checkpoint `respond` path retains its strict freshness rule. All runtime adapters remain fixture-verified rather than agent-tested against live credentials.
+
+
+Current companion-first update supersedes the mandatory source form below. Home shows the blue star, camera controls and typed/hands-free conversation. Optional Instructions in the header takes one public HTTPS URL. Muse Responses with built-in web search returns cited guidance; a missing completed search or citations produces a clear failure. Muse Voice Transcribe accepts a bounded 15-second mono WAV; the browser reads Muse Spark's answer aloud. Camera-on messages each send one fresh still. Video is not streamed continuously; microphone capture stays active during a voice session. Conversation and the current researched summary stay in session memory, with New task clearing context and canceling pending work. The optional illustrated checkpoint example retains its reviewed-source and progress controls.
+
+These provider paths are fixture-tested, not live-verified. There is no direct unrestricted fetch of user links. Provider/key details have moved to About to keep the key dialog minimal. No actual API credentials or paid calls were used.
+
+Standalone TypeScript/React/Vite frontend and Node 24 persistent local service; original small SVG spark and organizer illustration; source identity/text/steps with optional provenance URL and plain-text import; confirmation; user-reported progress; replay/live distinction; real camera APIs; local blur/brightness/motion heuristics; periodic/activity-burst JPEG buffering capped at 12 seconds, 32 frames, and 4 MB; no automatic inference; selected Check now uploads; per-session one-in-flight enforcement; five-second image freshness and revision/epoch cancellation; ephemeral BYOK model listing and Meta adapter; seven-day opt-in SQLite progress; authenticated HTTP-only local capability cookie and CSRF/origin checks; server status WebSocket.
+
+Stage-0 baseline instrumentation (Task 0, October 28, 2026): numbers-only timing logs, no behavior change. `shared/timing.ts` validates and logs voice-turn records (`capturedStartMs`, `asrFinalMs`, `modelFirstTokenMs`, `playbackStartMs`) and observation records (submit/return, frame count) to the browser console; `server/engine.ts` logs per-lane server spans to stdout. No transcript, frame, URL, or key content can pass the strict schemas. Barge-in latency, observation/server failure spans, and gesture-detection marks are not instrumented yet. `docs/SPIKE.md` holds the unmeasured baseline table, the run procedure, and the officially verified Muse Voice Transcribe realtime and SAM 3.1 contracts with explicit unknown lists.
+
+## Deliberate first-slice boundaries
+
+Local device sessions are not account login. SQLite is a single-process development store, not the proposed production PostgreSQL deployment. Optional URL research uses Muse built-in search; direct PDF/image manual extraction is not present. No GPU tracking, native clips, temporal action model, LiveKit, MediaPipe, Docling, Supabase, Rive, or hosted deployment is connected. Browser TTS is an optional local output experiment, canceled by text focus/input and an explicit interrupt button. Key price estimates remain unconfigured; the UI shows a call allowance rather than invented prices.
+
+Camera samples stay local until a camera-on message or explicit view check selects one JPEG. Frame eviction is normal checkpoint-buffer behavior, not preservation of all task events. No complete action coverage is claimed. The legacy checkpoint path suppresses long model responses as stale. Companion image questions instead retain delayed snapshot answers, without claiming present-time verification. User-reported completion is never relabeled visually verified. Foreground/background limitations remain visible and capture stops when the page hides.
+
+## Before a production label
+
+See the release gates in TODO.md and GLINT_DESIGN.md. In particular, test the actual key/model through the application, choose the first authoritative manual, calibrate error/false-alert metrics on a held-out task set, prove recovery and privacy across deployment instances, fund service costs, review public security and deletion, and complete real-device 60/90-minute soaks and load tests. No deployment, model accuracy, sustained thermal/battery behavior, or production certification is implied by local checks.

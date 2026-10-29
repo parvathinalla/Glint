@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1770" viewBox="0 0 1900 1770" role="img" aria-labelledby="title desc"><title id="title">Glint public-web architecture</title><desc id="desc">Three lanes show the foreground browser, authenticated long-running backend, and external services. Evidence, control feedback, and session-only key exchange have different line styles.</desc><defs>
+<marker id="data" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#285E47"/></marker>
+<marker id="control" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#3166A2"/></marker>
+<marker id="key" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#A34454"/></marker>
+</defs><rect width="100%" height="100%" fill="#F6F3EA"/>
+<text x="45" y="58" font-family="Segoe UI,Arial,sans-serif" font-size="38" fill="#202923" font-weight="700">Glint · public-web architecture</text>
+<text x="45" y="96" font-family="Segoe UI,Arial,sans-serif" font-size="22" fill="#53635B" font-weight="400">Proposed production direction · October 27, 2026 · no deployment or performance claim</text>
+<polyline points="50,145 110,145" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="125" y="152" font-family="Segoe UI,Arial,sans-serif" font-size="19" fill="#202923" font-weight="400">Data / evidence</text>
+<polyline points="400,145 460,145" fill="none" stroke="#3166A2" stroke-width="3" stroke-linejoin="round" stroke-dasharray="10 7" marker-end="url(#control)"/>
+<text x="475" y="152" font-family="Segoe UI,Arial,sans-serif" font-size="19" fill="#202923" font-weight="400">Control / feedback</text>
+<polyline points="790,145 850,145" fill="none" stroke="#A34454" stroke-width="3" stroke-linejoin="round" stroke-dasharray="3 6" marker-end="url(#key)"/>
+<text x="865" y="152" font-family="Segoe UI,Arial,sans-serif" font-size="19" fill="#202923" font-weight="400">Secret route</text>
+<text x="1190" y="152" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#53635B" font-weight="600">P = proposed   G = capability gate   U = user-reported test</text>
+<rect x="30" y="190" width="540" height="1390" rx="18" fill="#EBF1E8" stroke="#B5C7BC" stroke-width="2" />
+<rect x="620" y="190" width="650" height="1390" rx="18" fill="#E8EFEA" stroke="#B5C7BC" stroke-width="2" />
+<rect x="1320" y="190" width="550" height="1390" rx="18" fill="#EEEDF3" stroke="#B5C7BC" stroke-width="2" />
+<text x="52" y="228" font-family="Segoe UI,Arial,sans-serif" font-size="22" fill="#285E47" font-weight="700">DEVICE / FOREGROUND BROWSER</text>
+<text x="642" y="228" font-family="Segoe UI,Arial,sans-serif" font-size="22" fill="#285E47" font-weight="700">GLINT BACKEND / LONG-RUNNING SERVICE</text>
+<text x="1342" y="228" font-family="Segoe UI,Arial,sans-serif" font-size="22" fill="#3166A2" font-weight="700">EXTERNAL SERVICES / STORAGE</text>
+<rect x="50" y="260" width="500" height="185" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="72" y="290" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="72" y="323" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">1  Task + exact identity</text>
+<text x="72" y="360" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">React / TypeScript / Vite UI</text>
+<text x="72" y="390" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">HTTPS CDN assets; sign in first</text>
+<text x="72" y="420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Task, URL, upload, model/version</text>
+<rect x="650" y="260" width="590" height="185" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="672" y="290" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="672" y="323" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">2  Retrieve + confirm source</text>
+<text x="672" y="360" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Search + restricted fetch + isolated parser</text>
+<text x="672" y="390" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Page/image provenance; source hash</text>
+<text x="672" y="420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">User confirms version → task graph</text>
+<rect x="1340" y="260" width="510" height="185" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="1362" y="290" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">P · EXTERNAL SOURCE</text>
+<text x="1362" y="323" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">Authoritative instructions</text>
+<text x="1362" y="360" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Manufacturer / original recipe source</text>
+<text x="1362" y="390" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Search vendor and access unchosen</text>
+<text x="1362" y="420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">SSRF, MIME, size and injection checks</text>
+<polyline points="550,344 650,344" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="578" y="331" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">task</text>
+<polyline points="1240,344 1340,344" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="1260" y="331" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">fetch</text>
+<polyline points="945,445 945,500" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="963" y="480" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">confirmed source + graph</text>
+<rect x="50" y="500" width="500" height="445" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="72" y="530" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="72" y="563" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">3  Local capture + selection</text>
+<text x="72" y="600" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">MediaDevices camera / mic permissions</text>
+<text x="72" y="630" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Start, pause, stop remain local</text>
+<text x="72" y="660" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Web Worker: blur / motion / quality</text>
+<text x="72" y="690" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Encoded ring: proposed 12 s / 24 MB</text>
+<text x="72" y="720" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Regular samples + adaptive bursts</text>
+<text x="72" y="750" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Check now + ordered pre-event clips</text>
+<text x="72" y="780" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Only selected evidence leaves device</text>
+<text x="72" y="810" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Background / lock may suspend capture</text>
+<rect x="650" y="500" width="590" height="175" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="672" y="530" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="672" y="563" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">4  Authenticated session gateway</text>
+<text x="672" y="600" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Node 24 / TypeScript · HTTPS + WebSocket</text>
+<text x="672" y="630" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Owner, consent, sequence, epoch, quotas</text>
+<text x="672" y="660" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Bounded uploads; timestamps; acknowledgements</text>
+<polyline points="550,580 650,580" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="567" y="553" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">selected</text>
+<text x="565" y="610" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#285E47" font-weight="600">frames / clips</text>
+<rect x="650" y="730" width="590" height="215" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="672" y="760" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="672" y="793" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">5  Async vision + reasoning worker</text>
+<text x="672" y="830" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">One in-flight observation per session</text>
+<text x="672" y="860" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Temporal facts ≠ task-state authority</text>
+<text x="672" y="890" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Bounded context + retrieved evidence</text>
+<text x="672" y="920" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Meta adapter resolves memory-only key ref</text>
+<polyline points="945,675 945,730" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="963" y="709" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">evidence IDs + budget reservation</text>
+<rect x="1340" y="730" width="510" height="215" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="1362" y="760" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">U / G · NOT QUALIFIED</text>
+<text x="1362" y="793" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">User’s model-provider account</text>
+<text x="1362" y="830" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Meta adapter first; no invented endpoint</text>
+<text x="1362" y="860" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">U: text / image success; one call 18.2 s</text>
+<text x="1362" y="890" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">G: model ID, video, audio, rates, cost</text>
+<text x="1362" y="920" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Selected evidence + bounded prompt</text>
+<polyline points="1240,798 1340,798" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="1252" y="781" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">TLS call</text>
+<polyline points="1340,891 1240,891" fill="none" stroke="#3166A2" stroke-width="3" stroke-linejoin="round" stroke-dasharray="10 7" marker-end="url(#control)"/>
+<text x="1248" y="925" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#3166A2" font-weight="600">typed result</text>
+<rect x="650" y="1020" width="590" height="205" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="672" y="1050" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="672" y="1083" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">6  Deterministic evidence policy</text>
+<text x="672" y="1120" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Graph prerequisites / valid alternate order</text>
+<text x="672" y="1150" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Source, revision, evidence age, uncertainty</text>
+<text x="672" y="1180" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Commit state; suppress stale guidance</text>
+<text x="672" y="1210" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Short response + references + expiry</text>
+<polyline points="945,945 945,1020" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="963" y="989" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">proposed decision</text>
+<rect x="50" y="1020" width="500" height="205" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="72" y="1050" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="72" y="1083" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">7  Coach + immediate controls</text>
+<text x="72" y="1120" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Text / captions; STT + TTS are gated</text>
+<text x="72" y="1150" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Local barge-in cancels playback</text>
+<text x="72" y="1180" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Camera status + latest analysis age</text>
+<text x="72" y="1210" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Small original spark avatar; reduced motion</text>
+<polyline points="650,1120 550,1120" fill="none" stroke="#3166A2" stroke-width="3" stroke-linejoin="round" stroke-dasharray="10 7" marker-end="url(#control)"/>
+<text x="578" y="1103" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#3166A2" font-weight="600">fresh</text>
+<text x="570" y="1150" font-family="Segoe UI,Arial,sans-serif" font-size="16" fill="#3166A2" font-weight="600">feedback</text>
+<rect x="1340" y="1020" width="510" height="205" rx="18" fill="#FFFFFF" stroke="#B5C7BC" stroke-width="2" />
+<text x="1362" y="1050" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">PROPOSED</text>
+<text x="1362" y="1083" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">Durable state + temporary evidence</text>
+<text x="1362" y="1120" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">PostgreSQL: graph, events, budget, owner</text>
+<text x="1362" y="1150" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Private object store: consented clips only</text>
+<text x="1362" y="1180" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Signed access + lifecycle deletion</text>
+<text x="1362" y="1210" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">No provider keys in either store</text>
+<polyline points="1240,1118 1340,1118" fill="none" stroke="#285E47" stroke-width="3" stroke-linejoin="round"  marker-end="url(#data)"/>
+<text x="1251" y="1097" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#285E47" font-weight="600">commit</text>
+<rect x="50" y="1320" width="500" height="205" rx="18" fill="#FFF5F3" stroke="#A34454" stroke-width="2" />
+<text x="72" y="1350" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">P · SECRET INPUT</text>
+<text x="72" y="1383" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">Session-only BYOK input</text>
+<text x="72" y="1420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Masked ephemeral field; TLS exchange</text>
+<text x="72" y="1450" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Clear input after submit; no browser storage</text>
+<text x="72" y="1480" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Disclose backend / host receives key</text>
+<text x="72" y="1510" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Key pays model calls, not Glint services</text>
+<rect x="650" y="1320" width="590" height="205" rx="18" fill="#FFF5F3" stroke="#A34454" stroke-width="2" />
+<text x="672" y="1350" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">P · SECRET BOUNDARY</text>
+<text x="672" y="1383" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">Memory-only credential lease</text>
+<text x="672" y="1420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Owner + session bound opaque reference</text>
+<text x="672" y="1450" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Raw key in process memory for provider calls</text>
+<text x="672" y="1480" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Expiry / stop / process loss → reentry</text>
+<text x="672" y="1510" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">No logs, durable jobs, DB, object store, Redis</text>
+<polyline points="550,1410 650,1410" fill="none" stroke="#A34454" stroke-width="3" stroke-linejoin="round" stroke-dasharray="3 6" marker-end="url(#key)"/>
+<text x="560" y="1383" font-family="Segoe UI,Arial,sans-serif" font-size="18" fill="#A34454" font-weight="600">key / TLS</text>
+<rect x="1340" y="1320" width="510" height="205" rx="18" fill="#F8F6ED" stroke="#A79459" stroke-width="2" />
+<text x="1362" y="1350" font-family="Segoe UI,Arial,sans-serif" font-size="14" fill="#53635B" font-weight="700">G · OPTIONAL</text>
+<text x="1362" y="1383" font-family="Segoe UI,Arial,sans-serif" font-size="25" fill="#202923" font-weight="650">Optional specialized compute</text>
+<text x="1362" y="1420" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Modal only after access + benchmark</text>
+<text x="1362" y="1450" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Separate quota, funding and privacy review</text>
+<text x="1362" y="1480" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">STT / TTS providers separately gated</text>
+<text x="1362" y="1510" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#202923" font-weight="400">Not required for the baseline</text>
+<text x="45" y="1630" font-family="Segoe UI,Arial,sans-serif" font-size="23" fill="#202923" font-weight="600">Public edge: static assets may cache; authenticated APIs, media and key exchange must not.</text>
+<text x="45" y="1670" font-family="Segoe UI,Arial,sans-serif" font-size="21" fill="#53635B" font-weight="400">Long-running gateway + worker; durable progress survives restart, session-only keys do not. No turnkey hosted KV-cache control.</text>
+<text x="45" y="1710" font-family="Segoe UI,Arial,sans-serif" font-size="20" fill="#53635B" font-weight="400">All numeric limits are proposed. Qualify accuracy, p95 guidance age, 60/90-minute device soaks, security, cost and concurrency before release.</text></svg>
