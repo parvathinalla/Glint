@@ -8,6 +8,7 @@ import {
   type View,
 } from "../shared/model.ts";
 import { Problem, type Provider } from "./provider.ts";
+import { VoiceStream, type AsrSocketFactory } from "./asr-provider.ts";
 import { Store } from "./store.ts";
 import { AgentProvider } from "./agent-provider.ts";
 import type {
@@ -41,9 +42,25 @@ export type Session = {
   agentHistory: Turn[];
   agentSource?: Turn;
   visual?: VisualObservation;
+  voice?: VoiceStream;
 };
 export const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const HOUR = 3600000;
+export type VoiceSink = {
+  partial: (text: string) => void;
+  turn: (turnId: number, transcript: string) => void;
+  final: (transcript: string) => void;
+  error: (message: string) => void;
+  gap: () => void;
+  closed: (info: { code: number; retryable: boolean; reason?: string }) => void;
+};
+export type VoiceOptions = {
+  socket?: AsrSocketFactory;
+  sleep?: (ms: number) => Promise<void>;
+  rand?: () => number;
+};
+/** One client frame holds at most ~1.3 s of provider-native PCM. */
+export const MAX_VOICE_FRAME_BYTES = 64000;
 export class Engine {
   private sessions = new Map<string, Session>();
   constructor(
@@ -51,6 +68,7 @@ export class Engine {
     private provider: Provider,
     private now = Date.now,
     private agent = new AgentProvider(),
+    private voiceOptions: VoiceOptions = {},
   ) {}
   session(token?: string): { session: Session; token?: string } {
     const valid = token && /^[a-f0-9]{64}$/.test(token);
@@ -126,6 +144,8 @@ export class Engine {
     }
   }
   cancel(s: Session) {
+    s.voice?.close();
+    delete s.voice;
     s.controller?.abort();
     s.keyController?.abort();
     s.epoch++;
@@ -541,6 +561,129 @@ export class Engine {
       ),
       epoch: s.epoch,
     };
+  }
+  voiceOpen(s: Session, epoch: number, requestId: string, sink: VoiceSink) {
+    this.expireKey(s);
+    if (s.epoch !== epoch)
+      throw new Problem(
+        409,
+        "CANCELED",
+        "The session changed. Please try again.",
+      );
+    if (!s.key)
+      throw new Problem(
+        401,
+        "KEY_REQUIRED",
+        "Connect Muse Spark to talk with Glint.",
+      );
+    if (s.voice)
+      throw new Problem(
+        409,
+        "BUSY",
+        "A voice stream is already open for this session.",
+      );
+    if (s.seen.has(requestId))
+      throw new Problem(409, "DUPLICATE", "This request was already sent.");
+    if (s.calls >= 40)
+      throw new Problem(
+        429,
+        "APP_LIMIT",
+        "The 40-call session allowance is used. No more work was sent.",
+      );
+    s.seen.add(requestId);
+    if (s.seen.size > 100) s.seen.delete(s.seen.values().next().value!);
+    const key = s.key.raw;
+    const openEpoch = s.epoch;
+    const streamStart = this.now();
+    const current = () => s.epoch === openEpoch;
+    const stream = new VoiceStream(
+      key,
+      {
+        onPartial: (text) => {
+          if (current()) sink.partial(text);
+        },
+        onTurn: (id, text) => {
+          if (current()) sink.turn(id, text);
+        },
+        onFinal: (text) => {
+          if (current()) sink.final(text);
+        },
+        onError: (message) => {
+          if (current()) sink.error(message);
+        },
+        onGap: () => {
+          if (current()) sink.gap();
+        },
+        onClosed: (info) => {
+          if (s.voice === stream) delete s.voice;
+          sink.closed(info);
+        },
+        isCurrent: current,
+        chargeTurn: () => {
+          if (!current() || !s.key || s.calls >= 40) return false;
+          s.calls++;
+          s.lastSeen = this.now();
+          s.key.idleUntil = Math.min(this.now() + HOUR / 4, s.key.absoluteUntil);
+          console.info(
+            `[glint-timing] ${JSON.stringify({ scope: "server", lane: "voice-stream", ms: this.now() - streamStart })}`,
+          );
+          return true;
+        },
+      },
+      {
+        socket: this.voiceOptions.socket,
+        sleep: this.voiceOptions.sleep,
+        now: this.now,
+        rand: this.voiceOptions.rand,
+      },
+    );
+    stream.open();
+    s.voice = stream;
+  }
+  voiceFrame(s: Session, data: Uint8Array | string) {
+    const voice = s.voice;
+    if (!voice)
+      throw new Problem(
+        409,
+        "CANCELED",
+        "No voice stream is open for this session.",
+      );
+    if (typeof data === "string") {
+      let control: unknown;
+      try {
+        control = JSON.parse(data);
+      } catch {
+        throw new Problem(
+          400,
+          "AUDIO_INVALID",
+          "The voice control message is not valid JSON.",
+        );
+      }
+      if (
+        typeof control === "object" &&
+        control !== null &&
+        (control as { type?: unknown }).type === "end"
+      ) {
+        voice.end();
+        return;
+      }
+      throw new Problem(
+        400,
+        "AUDIO_INVALID",
+        "Unknown voice control message.",
+      );
+    }
+    if (data.byteLength > MAX_VOICE_FRAME_BYTES)
+      throw new Problem(
+        400,
+        "AUDIO_INVALID",
+        "The voice frame is too large.",
+      );
+    voice.audio(data);
+  }
+  voiceClose(s: Session) {
+    s.voice?.close();
+    delete s.voice;
   }
   async respond(
     s: Session,

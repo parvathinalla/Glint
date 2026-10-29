@@ -42,3 +42,145 @@ it("starts speaking complete phrases before the response finishes and cancels qu
   expect(cancel).toHaveBeenCalledOnce();
   expect(changed.at(-1)).toBe(false);
 });
+it("unlocks with resume plus one silent utterance and loads voices", () => {
+  const calls: string[] = [],
+    texts: string[] = [],
+    changed: boolean[] = [];
+  let voiceLoads = 0;
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      speak: (utterance: { text: string }) => {
+        calls.push("speak");
+        texts.push(utterance.text);
+      },
+      resume: () => calls.push("resume"),
+      cancel: () => calls.push("cancel"),
+      getVoices: () => {
+        voiceLoads++;
+        return [];
+      },
+      addEventListener: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue((value) => changed.push(value));
+  queue.unlock();
+  expect(calls).toEqual(["resume", "speak"]);
+  expect(texts).toEqual([" "]);
+  expect(changed).toEqual([]);
+  expect(voiceLoads).toBe(1);
+});
+it("prefers a local voice over the network default when speaking", () => {
+  const spoken: { text: string; voice?: unknown; onend: () => void }[] = [];
+  const network = { name: "net", lang: "en-US", default: true, localService: false },
+    local = { name: "local", lang: "en-US", default: false, localService: true };
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      getVoices: () => [network, local],
+      addEventListener: () => {},
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      resume: () => {},
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      voice?: unknown;
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(() => {});
+  queue.push("Hi. ");
+  expect(spoken).toHaveLength(1);
+  expect(spoken[0].voice).toBe(local);
+});
+it("uses voices that arrive after the voiceschanged event", () => {
+  const spoken: { text: string; voice?: unknown; onend: () => void }[] = [];
+  const local = { name: "local", lang: "en-US", default: true, localService: true };
+  let voices: unknown[] = [],
+    listener = () => {};
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      getVoices: () => voices,
+      addEventListener: (_type: string, fn: () => void) => {
+        listener = fn;
+      },
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      resume: () => {},
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      voice?: unknown;
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(() => {});
+  queue.push("Hi. ");
+  expect(spoken[0].voice).toBeUndefined();
+  voices = [local];
+  listener();
+  spoken[0].onend();
+  queue.push("Again. ");
+  expect(spoken).toHaveLength(2);
+  expect(spoken[1].voice).toBe(local);
+});
+it("resumes a paused synthesizer before speaking each phrase", () => {
+  const calls: string[] = [];
+  const synth = {
+    paused: true,
+    speak: () => calls.push("speak"),
+    resume: () => {
+      calls.push("resume");
+      synth.paused = false;
+    },
+    cancel: () => calls.push("cancel"),
+  };
+  vi.stubGlobal("window", { speechSynthesis: synth });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(() => {});
+  queue.push("Hi. ");
+  expect(calls).toEqual(["resume", "speak"]);
+});
+it("chunks long phrases so no utterance exceeds the iOS-safe length", () => {
+  const spoken: { text: string; onend: () => void }[] = [];
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      resume: () => {},
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(() => {});
+  const words = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+  queue.push(words);
+  queue.finish();
+  for (let i = 0; i < spoken.length && i < 20; i++) spoken[i].onend();
+  expect(spoken.length).toBeGreaterThan(1);
+  for (const utterance of spoken)
+    expect(utterance.text.length).toBeLessThanOrEqual(200);
+  expect(spoken.map((utterance) => utterance.text).join(" ")).toBe(words);
+});

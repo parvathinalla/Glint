@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VoiceTurnDetector, voiceWav } from "../shared/voice-turn.ts";
+import {
+  VoiceTurnDetector,
+  pcm16Bytes,
+  voiceWav,
+} from "../shared/voice-turn.ts";
 
+/** Streaming sink: live PCM16 mono plus a marker at every turn end. */
+export type MicStream = {
+  samples: (pcm: Uint8Array) => void;
+  turnEnd: () => void;
+};
 /** One explicit microphone session, with local turn detection and bounded audio. */
 export function useMicrophone(
   onReady: (audio: Blob) => void,
   onProblem: (message: string) => void,
   onSpeechStart: () => void,
   speaking: boolean,
+  streaming?: MicStream,
 ) {
   const [enabled, setEnabled] = useState(false),
     [recording, setRecording] = useState(false),
@@ -15,8 +25,20 @@ export function useMicrophone(
     context = useRef<AudioContext | null>(null),
     node = useRef<AudioWorkletNode | null>(null);
   const generation = useRef(0);
-  const callbacks = useRef({ onReady, onProblem, onSpeechStart, speaking });
-  callbacks.current = { onReady, onProblem, onSpeechStart, speaking };
+  const callbacks = useRef({
+    onReady,
+    onProblem,
+    onSpeechStart,
+    speaking,
+    streaming,
+  });
+  callbacks.current = {
+    onReady,
+    onProblem,
+    onSpeechStart,
+    speaking,
+    streaming,
+  };
   const cancel = useCallback(() => {
     generation.current++;
     if (node.current) {
@@ -78,9 +100,16 @@ export function useMicrophone(
           setRecording(true);
           callbacks.current.onSpeechStart();
         }
+        const sink = callbacks.current.streaming;
+        if (turn.live.length && sink)
+          for (const frame of turn.live)
+            sink.samples(pcm16Bytes(frame, audio.sampleRate));
         if (turn.audio) {
-          setRecording(false);
           callbacks.current.onReady(voiceWav(turn.audio, audio.sampleRate));
+        }
+        if (turn.ended) {
+          setRecording(false);
+          sink?.turnEnd();
         }
       };
       media.getAudioTracks()[0].addEventListener("ended", () => {

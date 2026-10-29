@@ -25,6 +25,11 @@ import { useMicrophone } from "./microphone.ts";
 import { streamAgent } from "./agent-stream.ts";
 import { SpeechQueue } from "./speech-queue.ts";
 import { BargeGuard } from "./barge-guard.ts";
+import {
+  StreamTurns,
+  VoiceClient,
+  isStreamingVoiceEnabled,
+} from "./voice-stream.ts";
 import { logTiming, type VoiceTurnTiming } from "../shared/timing.ts";
 import type { View } from "../shared/model.ts";
 import {
@@ -47,8 +52,14 @@ type Message = {
   sources?: AgentReply["sources"];
   streaming?: boolean;
   interrupted?: boolean;
+  note?: string;
   snapshot?: AgentReply["snapshot"];
 };
+/** Attached when a turn falls back to the WAV upload, so the fallback is never silent. */
+const VOICE_FALLBACK_NOTE =
+  "Sent as a voice recording (live transcription unavailable).";
+const voiceStreamUrl = () =>
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/voice-stream`;
 export function CompanionHome({
   view,
   online,
@@ -92,6 +103,7 @@ export function CompanionHome({
   );
   const [messages, setMessages] = useState<Message[]>([]),
     [question, setQuestion] = useState("");
+  const [partial, setPartial] = useState("");
   const [busy, setBusy] = useState(false),
     [speaking, setSpeaking] = useState(false),
     [readAloud, setReadAloud] = useState(true);
@@ -104,9 +116,17 @@ export function CompanionHome({
     generation = useRef(0);
   const current = useRef(view);
   current.current = view;
+  const cameraActive = useRef(camera.active);
+  cameraActive.current = camera.active;
+  const voice = useRef<VoiceClient | null>(null),
+    turns = useRef(new StreamTurns()),
+    streamingMode = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
   const speech = useRef<SpeechQueue | null>(null);
-  const pendingVoice = useRef<{ capturedStartMs: number } | null>(null);
+  const pendingVoice = useRef<{
+    capturedStartMs: number;
+    asrFirstPartialMs?: number;
+  } | null>(null);
   const activeVoice = useRef<VoiceTurnTiming | null>(null);
   const bargeGuard = useRef<BargeGuard | null>(null);
   if (!bargeGuard.current) bargeGuard.current = new BargeGuard();
@@ -123,7 +143,7 @@ export function CompanionHome({
     text: string,
     instructionsUrl?: string,
     withImage = false,
-    audio?: Blob,
+    voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
   ) {
     if (lock.current) {
       if (visualJob.current) await interrupt(false);
@@ -143,19 +163,24 @@ export function CompanionHome({
     setProblem("");
     setFailed(null);
     stopSpeech();
-    if (audio) {
+    if (voiceInput) {
       activeVoice.current = {
         kind: "voice-turn",
         capturedStartMs: pendingVoice.current?.capturedStartMs ?? Date.now(),
       };
+      if (voiceInput.asrFinalMs !== undefined)
+        activeVoice.current.asrFinalMs = voiceInput.asrFinalMs;
+      const firstPartial = pendingVoice.current?.asrFirstPartialMs;
+      if (firstPartial !== undefined)
+        activeVoice.current.asrFirstPartialMs = firstPartial;
       pendingVoice.current = null;
     }
     try {
       if (pause.current) await pause.current;
       if (controller.signal.aborted || token !== generation.current) return;
       epoch = current.current.epoch;
-      if (audio) {
-        const encoded = (await asDataUrl(audio)).split(",")[1];
+      if (voiceInput?.audio) {
+        const encoded = (await asDataUrl(voiceInput.audio)).split(",")[1];
         const result = (await api(
           "voice",
           { audio: encoded, epoch, requestId: crypto.randomUUID() },
@@ -195,9 +220,14 @@ export function CompanionHome({
         items.at(-1)?.who === "you" &&
         items.at(-1)?.text === (instructionsUrl || text)
           ? items
-          : ([...items, { who: "you", text: instructionsUrl || text }].slice(
-              -20,
-            ) as Message[]),
+          : ([
+              ...items,
+              {
+                who: "you",
+                text: instructionsUrl || text,
+                ...(voiceInput?.note ? { note: voiceInput.note } : {}),
+              },
+            ].slice(-20) as Message[]),
       );
       let streamed = false;
       const result = await streamAgent(
@@ -296,7 +326,7 @@ export function CompanionHome({
         );
       }
     } finally {
-      if (audio && activeVoice.current) {
+      if (voiceInput && activeVoice.current) {
         logTiming(activeVoice.current);
         activeVoice.current = null;
       }
@@ -308,18 +338,66 @@ export function CompanionHome({
       }
     }
   }
+  const sendRef = useRef(send);
+  sendRef.current = send;
   const mic = useMicrophone(
     (audio) => {
       if (bargeGuard.current?.turnReady()) return;
-      void send("", undefined, camera.active, audio);
+      if (streamingMode.current) {
+        const decision = turns.current.wavReady(audio);
+        if (decision === "fallback")
+          void send("", undefined, camera.active, {
+            audio,
+            note: VOICE_FALLBACK_NOTE,
+          });
+        return;
+      }
+      void send("", undefined, camera.active, { audio });
     },
     onProblem,
     () => {
       if (bargeGuard.current?.turnStarted()) return;
       pendingVoice.current = { capturedStartMs: Date.now() };
-      if (lock.current || speaking) void interrupt(false);
+      if (streamingMode.current) {
+        const flush = turns.current.started();
+        if (flush) {
+          voice.current?.closeStream();
+          void send("", undefined, camera.active, {
+            audio: flush,
+            note: VOICE_FALLBACK_NOTE,
+          });
+        }
+        setPartial("");
+        if (voice.current) voice.current.open(current.current.epoch);
+        else turns.current.streamFailed();
+      }
+      if (lock.current || speaking) {
+        const timing = activeVoice.current;
+        if (
+          timing &&
+          timing.playbackStartMs !== undefined &&
+          timing.bargeDetectMs === undefined
+        )
+          timing.bargeDetectMs = Date.now();
+        void interrupt(false);
+        // interrupt() cancels local speech synchronously, so this mark lands
+        // right after the playback stop it measures.
+        const stopped = activeVoice.current;
+        if (
+          stopped &&
+          stopped.bargeDetectMs !== undefined &&
+          stopped.playbackStopMs === undefined
+        )
+          stopped.playbackStopMs = Date.now();
+      }
     },
     speaking,
+    {
+      samples: (pcm) => voice.current?.audio(pcm),
+      turnEnd: () => {
+        if (turns.current.shouldEnd()) voice.current?.end();
+      },
+    },
   );
   const cancelWork = useCallback(() => {
     generation.current++;
@@ -513,6 +591,72 @@ export function CompanionHome({
     return () => clearInterval(timer);
   }, [camera.active]);
   useEffect(() => {
+    if (!mic.enabled) {
+      voice.current?.dispose();
+      voice.current = null;
+      streamingMode.current = false;
+      turns.current.reset();
+      setPartial("");
+      return;
+    }
+    if (!isStreamingVoiceEnabled()) return;
+    streamingMode.current = true;
+    const fallback = (audio: Blob) =>
+      void sendRef.current("", undefined, cameraActive.current, {
+        audio,
+        note: VOICE_FALLBACK_NOTE,
+      });
+    const finishStreamed = (transcript: string) => {
+      if (!turns.current.finalArrived()) return;
+      setPartial("");
+      voice.current?.closeStream();
+      void sendRef.current(transcript, undefined, cameraActive.current, {
+        asrFinalMs: Date.now(),
+      });
+    };
+    const failStream = () => {
+      const audio = turns.current.streamFailed();
+      setPartial("");
+      if (audio) fallback(audio);
+      return audio;
+    };
+    const client = new VoiceClient(voiceStreamUrl(), {
+      onOpened: () => {},
+      onPartial: (text) => {
+        const pending = pendingVoice.current;
+        if (pending && pending.asrFirstPartialMs === undefined)
+          pending.asrFirstPartialMs = Date.now();
+        setPartial(text);
+      },
+      onTurn: (_id, transcript) => finishStreamed(transcript),
+      onFinal: (transcript) => finishStreamed(transcript),
+      // A shed-audio gap still ends in a final or a failure; nothing to show.
+      onGap: () => {},
+      onClosed: (info) => {
+        const answered = failStream();
+        if (!answered && info.reason === "allowance-exhausted")
+          setProblem(
+            "The 40-call session allowance is used. No more work was sent.",
+          );
+      },
+      onError: (code, message) => {
+        // Transient provider hiccup: the turn continues, so log it instead
+        // of alarming the user; final or closed still reports the outcome.
+        if (code === "ASR_ERROR") {
+          console.warn(`[glint-voice] provider error: ${message}`);
+          return;
+        }
+        failStream();
+      },
+    });
+    voice.current = client;
+    client.connect();
+    return () => {
+      if (voice.current === client) voice.current = null;
+      client.dispose();
+    };
+  }, [mic.enabled]);
+  useEffect(() => {
     const hide = () => {
       if (document.visibilityState === "hidden") {
         cancel();
@@ -543,6 +687,14 @@ export function CompanionHome({
     event.preventDefault();
     if (question.trim()) void send(question.trim(), undefined, camera.active);
   }
+  // Voice state machine, derived so it cannot disagree with the flags.
+  const voiceState = mic.recording
+    ? "listening"
+    : speaking
+      ? "speaking"
+      : busy
+        ? "processing"
+        : "idle";
   return (
     <section className="companion-home" aria-label="Talk with Glint">
       <div className="companion-stage">
@@ -588,11 +740,11 @@ export function CompanionHome({
           </button>
         </div>
         <p className="companion-status" role="status">
-          {mic.recording
+          {voiceState === "listening"
             ? "Listening…"
-            : speaking
+            : voiceState === "speaking"
               ? "Glint is speaking"
-              : busy
+              : voiceState === "processing"
                 ? researching
                   ? "Finding and reading instructions…"
                   : "Glint is thinking…"
@@ -600,6 +752,7 @@ export function CompanionHome({
                   ? "Voice on · listening"
                   : ""}
         </p>
+        {partial && <p className="companion-partial">{partial}</p>}
         {(busy || speaking) && (
           <button className="text-button" onClick={() => void interrupt(false)}>
             Interrupt
@@ -667,6 +820,7 @@ export function CompanionHome({
               <p>{message.text}</p>
               {message.streaming && <small>Replying…</small>}
               {message.interrupted && <small>Reply interrupted</small>}
+              {message.note && <small>{message.note}</small>}
               {!!message.sources?.length && (
                 <ul className="agent-sources">
                   {message.sources.map((source) => (
@@ -752,6 +906,7 @@ export function CompanionHome({
             aria-pressed={mic.enabled}
             disabled={mic.preparing || !online}
             onClick={() => {
+              speech.current?.unlock();
               if (!view.key.connected) {
                 connect();
                 return;

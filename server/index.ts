@@ -2,7 +2,12 @@ import { createServer } from "node:http";
 import { resolve } from "node:path";
 import express from "express";
 import { WebSocketServer } from "ws";
-import { createApp, cookieToken } from "./app.ts";
+import {
+  VOICE_WS_MAX_PAYLOAD,
+  createApp,
+  cookieToken,
+  handleVoiceSocket,
+} from "./app.ts";
 import { Engine } from "./engine.ts";
 import { Store } from "./store.ts";
 import { MetaProvider } from "./provider.ts";
@@ -48,12 +53,22 @@ if (!production) {
   app.get("/{*path}", (_req, res) => res.sendFile(resolve("dist/index.html")));
 }
 const ws = new WebSocketServer({ noServer: true, maxPayload: 1024 });
+const voice = new WebSocketServer({
+  noServer: true,
+  maxPayload: VOICE_WS_MAX_PAYLOAD,
+});
 server.on("upgrade", (req, socket, head) => {
-  if (req.url !== "/events") return;
+  if (req.url !== "/events" && req.url !== "/voice-stream") return;
   const session = engine.existing(cookieToken(req.headers.cookie));
   if (!session || req.headers.origin !== origin) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
+    return;
+  }
+  if (req.url === "/voice-stream") {
+    voice.handleUpgrade(req, socket, head, (client) =>
+      handleVoiceSocket(client, session, engine),
+    );
     return;
   }
   ws.handleUpgrade(req, socket, head, (client) => {
@@ -86,6 +101,7 @@ server.listen(port, "127.0.0.1", () =>
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
     clearInterval(cleanup);
+    voice.close();
     ws.close();
     server.close();
     engine.close();

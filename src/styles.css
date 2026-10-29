@@ -55,6 +55,12 @@
   min-height: 20px;
   margin-top: 16px;
 }
+.companion-stage > .companion-partial {
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.75;
+  margin-top: 4px;
+}
 .companion-controls .recording {
   background: #953f36;
 }

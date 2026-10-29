@@ -53,6 +53,123 @@ function validateCameraImage(image: string, maxBytes = 600000) {
       "The camera image is invalid or too large.",
     );
 }
+/** Minimal browser-socket surface the voice handler needs; ws satisfies it. */
+export type VoiceSocket = {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  on(event: "message", listener: (data: unknown) => void): void;
+  on(event: "close", listener: () => void): void;
+};
+/**
+ * Transport ceiling above the 64 KB engine frame cap, so oversize frames
+ * get a proper error instead of a dropped socket.
+ */
+export const VOICE_WS_MAX_PAYLOAD = 262144;
+const voiceControl = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("open"),
+    requestId: z.string().uuid(),
+    epoch: z.number().int().nonnegative(),
+  }),
+  z.object({ type: z.literal("end") }),
+  z.object({ type: z.literal("close") }),
+]);
+function toVoiceBytes(data: unknown): Uint8Array | null {
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (Array.isArray(data) && data.every((x) => x instanceof Uint8Array))
+    return new Uint8Array(Buffer.concat(data));
+  return null;
+}
+/**
+ * One browser socket carrying voice turns: text control frames plus binary
+ * PCM16 mono, answered with partial/final/error JSON. The socket outlives
+ * a turn so the next open reuses it; closing the socket ends the stream.
+ */
+export function handleVoiceSocket(
+  client: VoiceSocket,
+  session: Session,
+  engine: Engine,
+) {
+  const send = (event: unknown) => {
+    try {
+      client.send(JSON.stringify(event));
+    } catch {
+      // The browser is gone; dropping the event is the whole job.
+    }
+  };
+  const fail = (error: unknown) => {
+    if (error instanceof Problem)
+      send({ type: "error", code: error.code, message: error.message });
+    else if (error instanceof z.ZodError)
+      send({
+        type: "error",
+        code: "INVALID_INPUT",
+        message:
+          "Some fields are missing or invalid. Review the form and try again.",
+      });
+    else
+      send({
+        type: "error",
+        code: "UNAVAILABLE",
+        message:
+          "The operation could not finish. Nothing was retried automatically.",
+      });
+  };
+  client.on("message", (data) => {
+    try {
+      if (typeof data !== "string") {
+        const bytes = toVoiceBytes(data);
+        if (!bytes) {
+          fail(
+            new Problem(
+              400,
+              "AUDIO_INVALID",
+              "The voice frame is not valid audio.",
+            ),
+          );
+          return;
+        }
+        engine.voiceFrame(session, bytes);
+        return;
+      }
+      let raw: unknown;
+      try {
+        raw = JSON.parse(data);
+      } catch {
+        fail(
+          new Problem(
+            400,
+            "INVALID_INPUT",
+            "The voice control message is not valid.",
+          ),
+        );
+        return;
+      }
+      const control = voiceControl.parse(raw);
+      if (control.type === "open") {
+        engine.voiceOpen(session, control.epoch, control.requestId, {
+          partial: (text) => send({ type: "partial", text }),
+          turn: (turnId, transcript) => send({ type: "turn", turnId, transcript }),
+          final: (transcript) => send({ type: "final", transcript }),
+          error: (message) =>
+            send({ type: "error", code: "ASR_ERROR", message }),
+          gap: () => send({ type: "gap" }),
+          closed: (info) => send({ type: "closed", ...info }),
+        });
+        send({ type: "opened" });
+      } else if (control.type === "end") {
+        engine.voiceFrame(session, JSON.stringify({ type: "end" }));
+      } else {
+        engine.voiceClose(session);
+        send({ type: "closed", code: 1000, retryable: false });
+      }
+    } catch (error) {
+      fail(error);
+    }
+  });
+  client.on("close", () => engine.voiceClose(session));
+}
 export function createApp(engine: Engine, origin: string, production = false) {
   const app = express();
   app.disable("x-powered-by");

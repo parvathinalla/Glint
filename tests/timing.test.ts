@@ -34,6 +34,37 @@ describe("stage-0 timing instrumentation", () => {
     expect(d.asrToFirstToken).toBeUndefined();
     expect(d.endToEnd).toBeUndefined();
   });
+  it("derives first-partial and barge-stop spans", () => {
+    const d = voiceTurnDurations({
+      kind: "voice-turn",
+      capturedStartMs: 0,
+      asrFirstPartialMs: 400,
+      asrFinalMs: 1500,
+      bargeDetectMs: 2000,
+      playbackStopMs: 2005,
+    });
+    expect(d.captureToFirstPartial).toBe(400);
+    expect(d.bargeStop).toBe(5);
+    const e = voiceTurnDurations({ kind: "voice-turn", capturedStartMs: 0 });
+    expect(e.captureToFirstPartial).toBeUndefined();
+    expect(e.bargeStop).toBeUndefined();
+  });
+  it("accepts streaming and barge-in stages on voice turns", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      logTiming({
+        kind: "voice-turn",
+        capturedStartMs: 1,
+        asrFirstPartialMs: 2,
+        asrFinalMs: 3,
+        bargeDetectMs: 4,
+        playbackStopMs: 5,
+      });
+      expect(info).toHaveBeenCalledOnce();
+    } finally {
+      info.mockRestore();
+    }
+  });
   it("derives observation round-trip", () => {
     expect(
       observationDurations({

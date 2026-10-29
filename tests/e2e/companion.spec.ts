@@ -227,6 +227,12 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
     }),
   ).toBeVisible();
   expect(voiceRequests).toBe(1);
+  await expect(
+    page.getByText(
+      "Sent as a voice recording (live transcription unavailable).",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.waitForTimeout(600);
   await page.evaluate(() =>
     (
@@ -260,6 +266,90 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
   });
 });
 
+test("streaming voice shows partials and sends without a file upload (mock socket)", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["microphone"]);
+  await syntheticMicrophone(page);
+  await page.routeWebSocket("**/events", () => {});
+  await page.route("**/api/session", async (route) => {
+    const value = await (await route.fetch()).json();
+    value.key = { connected: true, models: ["muse-spark-test"] };
+    await route.fulfill({ json: value });
+  });
+  let voiceRequests = 0,
+    agentRequests = 0;
+  await page.route("**/api/voice", async (route) => {
+    voiceRequests++;
+    await route.fulfill({ status: 500, json: { message: "must not happen" } });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const body = route.request().postDataJSON();
+    agentRequests++;
+    await route.fulfill({
+      json: {
+        message: "Of course. Do you have a product or manual link?",
+        sources: [],
+        searched: false,
+        epoch: body.epoch,
+      },
+    });
+  });
+  await page.routeWebSocket("**/voice-stream", (ws) => {
+    let partialSent = false;
+    ws.onMessage((message) => {
+      if (typeof message !== "string") {
+        if (!partialSent) {
+          partialSent = true;
+          ws.send(JSON.stringify({ type: "partial", text: "Help me" }));
+        }
+        return;
+      }
+      const frame = JSON.parse(message) as { type: string };
+      if (frame.type === "open") ws.send(JSON.stringify({ type: "opened" }));
+      if (frame.type === "end") {
+        ws.send(
+          JSON.stringify({
+            type: "final",
+            transcript: "Help me build this organizer.",
+          }),
+        );
+        ws.send(JSON.stringify({ type: "closed", code: 1000, retryable: false }));
+      }
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mute spoken replies" }).click();
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    (
+      window as unknown as { voiceFixture: { say: () => void } }
+    ).voiceFixture.say(),
+  );
+  await expect(page.getByText("Help me", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Help me build this organizer.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Of course. Do you have a product or manual link?", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(voiceRequests).toBe(0);
+  expect(agentRequests).toBe(1);
+  await expect(
+    page.getByText("Sent as a voice recording (live transcription unavailable).", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
+
 test("voice can interrupt read-aloud and continue with a new automatic turn", async ({
   page,
 }) => {
@@ -270,8 +360,10 @@ test("voice can interrupt read-aloud and continue with a new automatic turn", as
     fixture.canceled = 0;
     Object.defineProperty(window, "speechSynthesis", {
       value: {
-        speak: (utterance: SpeechSynthesisUtterance) =>
-          fixture.spoken.push(utterance.text),
+        // Audible replies only: the silent unlock utterance is not speech.
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
         cancel: () => {
           fixture.canceled++;
         },

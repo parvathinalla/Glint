@@ -10,9 +10,12 @@ export const voiceTurnTiming = z
   .object({
     kind: z.literal("voice-turn"),
     capturedStartMs: z.number(),
+    asrFirstPartialMs: z.number().optional(),
     asrFinalMs: z.number().optional(),
     modelFirstTokenMs: z.number().optional(),
     playbackStartMs: z.number().optional(),
+    bargeDetectMs: z.number().optional(),
+    playbackStopMs: z.number().optional(),
   })
   .strict();
 export type VoiceTurnTiming = z.infer<typeof voiceTurnTiming>;
@@ -65,9 +68,11 @@ export function voiceTurnDurations(t: VoiceTurnTiming) {
     a === undefined || b === undefined ? undefined : b - a;
   return {
     captureToAsr: span(t.capturedStartMs, t.asrFinalMs),
+    captureToFirstPartial: span(t.capturedStartMs, t.asrFirstPartialMs),
     asrToFirstToken: span(t.asrFinalMs, t.modelFirstTokenMs),
     firstTokenToPlayback: span(t.modelFirstTokenMs, t.playbackStartMs),
     endToEnd: span(t.capturedStartMs, t.playbackStartMs),
+    bargeStop: span(t.bargeDetectMs, t.playbackStopMs),
   };
 }
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { VoiceTurnDetector, voiceWav } from "../shared/voice-turn.ts";
+import {
+  VoiceTurnDetector,
+  pcm16Bytes,
+  voiceWav,
+} from "../shared/voice-turn.ts";
 describe("local hands-free turn boundaries", () => {
   it("does not submit silence and detects two turns without a button press", () => {
     const detector = new VoiceTurnDetector(24000);
@@ -40,5 +44,74 @@ describe("local hands-free turn boundaries", () => {
     expect(data.getUint32(24, true)).toBe(24000);
     expect(data.getUint16(22, true)).toBe(1);
     expect(data.getUint16(34, true)).toBe(16);
+  });
+});
+describe("streaming live frames", () => {
+  it("emits nothing while idle, then pre-roll plus the start frame", () => {
+    const detector = new VoiceTurnDetector(24000);
+    const quiet = new Float32Array(1024),
+      speech = new Float32Array(1024).fill(0.1);
+    expect(detector.push(quiet).live).toEqual([]);
+    let result = detector.push(quiet);
+    expect(result.live).toEqual([]);
+    for (let i = 0; i < 3; i++) result = detector.push(speech);
+    expect(result.started).toBeUndefined();
+    expect(result.live).toEqual([]);
+    result = detector.push(speech);
+    expect(result.started).toBe(true);
+    const streamed = result.live.reduce((n, f) => n + f.length, 0);
+    expect(streamed).toBeGreaterThan(1024);
+    result = detector.push(speech);
+    expect(result.started).toBeUndefined();
+    expect(result.live).toHaveLength(1);
+    expect(result.live[0]).toHaveLength(1024);
+  });
+  it("ends usable turns with audio and every turn with a marker", () => {
+    const detector = new VoiceTurnDetector(24000);
+    const speech = new Float32Array(2400).fill(0.1),
+      quiet = new Float32Array(2400);
+    for (let i = 0; i < 2; i++) detector.push(speech);
+    let result = detector.push(quiet);
+    for (let i = 0; i < 8; i++) result = detector.push(quiet);
+    expect(result.audio).toBeDefined();
+    expect(result.ended).toBe(true);
+    expect(result.live).toHaveLength(1);
+  });
+  it("marks unusable turns ended without audio and stays silent in cooldown", () => {
+    const detector = new VoiceTurnDetector(24000);
+    const speech = new Float32Array(1024).fill(0.1),
+      quiet = new Float32Array(1024);
+    for (let i = 0; i < 4; i++) detector.push(speech);
+    let result = detector.push(quiet);
+    for (let i = 0; i < 19; i++) result = detector.push(quiet);
+    expect(result.audio).toBeUndefined();
+    expect(result.ended).toBe(true);
+    result = detector.push(speech);
+    expect(result.started).toBeUndefined();
+    expect(result.live).toEqual([]);
+  });
+});
+describe("pcm16 streaming bytes", () => {
+  it("encodes mono 16-bit little-endian at the resampled rate", () => {
+    const bytes = pcm16Bytes(new Float32Array([0, 0.5, -0.5, 1, -1]), 24000);
+    expect(bytes).toHaveLength(10);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(view.getInt16(0, true)).toBe(0);
+    expect(view.getInt16(2, true)).toBe(Math.round(0.5 * 32767));
+    expect(view.getInt16(4, true)).toBe(Math.round(-0.5 * 32768));
+    expect(view.getInt16(6, true)).toBe(32767);
+    expect(view.getInt16(8, true)).toBe(-32768);
+  });
+  it("resamples 48 kHz input down to 24 kHz", () => {
+    expect(pcm16Bytes(new Float32Array(4800).fill(0.1), 48000)).toHaveLength(
+      2400 * 2,
+    );
+  });
+  it("matches the WAV payload bytes exactly", async () => {
+    const samples = new Float32Array(2400).fill(0.1);
+    const wav = new Uint8Array(
+      await voiceWav(samples, 24000).arrayBuffer(),
+    );
+    expect(wav.slice(44)).toEqual(pcm16Bytes(samples, 24000));
   });
 });

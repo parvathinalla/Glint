@@ -283,3 +283,181 @@ describe("documented Meta contract and sanitized responses", () => {
     ).rejects.toMatchObject({ code: "DECISION_INVALID" });
   });
 });
+describe("streaming voice lane", () => {
+  class Socket {
+    sent: (string | Uint8Array)[] = [];
+    closed = false;
+    onopen: (() => void) | null = null;
+    onmessage: ((e: { data: string | Uint8Array }) => void) | null = null;
+    onclose: ((e: { code: number; reason: string }) => void) | null = null;
+    onerror: ((e: unknown) => void) | null = null;
+    send(d: string | Uint8Array) {
+      this.sent.push(d);
+    }
+    close() {
+      this.closed = true;
+    }
+  }
+  function voice() {
+    const sockets: Socket[] = [];
+    const sink: string[] = [];
+    const e = new Engine(new Store(":memory:"), providers, () => clock, undefined, {
+      socket: () => {
+        const s = new Socket();
+        sockets.push(s);
+        return s;
+      },
+      sleep: () => Promise.resolve(),
+      rand: () => 0,
+    });
+    engines.push(e);
+    const { session: s } = e.session();
+    const events = {
+      partial: (text: string) => sink.push(`partial:${text}`),
+      turn: (id: number, text: string) => sink.push(`turn:${id}:${text}`),
+      final: (text: string) => sink.push(`final:${text}`),
+      error: (m: string) => sink.push(`error:${m}`),
+      gap: () => sink.push("gap"),
+      closed: (info: { code: number; retryable: boolean; reason?: string }) =>
+        sink.push(`closed:${info.code}:${info.retryable}:${info.reason ?? ""}`),
+    };
+    const open = (id = randomUUID()) =>
+      e.voiceOpen(
+        s,
+        s.epoch,
+        id,
+        events,
+      );
+    const ack = () => {
+      sockets[0].onopen!();
+      sockets[0].onmessage!({ data: JSON.stringify({ sessionId: "srv" }) });
+    };
+    return { e, s, sockets, sink, open, ack };
+  }
+  it("requires a key, current epoch, and a free voice lane", async () => {
+    const t = voice();
+    await expect(
+      (async () => t.open())(),
+    ).rejects.toMatchObject({ code: "KEY_REQUIRED" });
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    expect(() =>
+      t.e.voiceOpen(t.s, t.s.epoch + 1, randomUUID(), {
+        partial: () => {},
+        turn: () => {},
+        final: () => {},
+        error: () => {},
+        gap: () => {},
+        closed: () => {},
+      }),
+    ).toThrowError(expect.objectContaining({ code: "CANCELED" }));
+    t.open();
+    expect(() => t.open()).toThrowError(
+      expect.objectContaining({ code: "BUSY" }),
+    );
+  });
+  it("rejects duplicate opens and exhausted allowances", async () => {
+    const t = voice();
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    const id = randomUUID();
+    t.e.voiceOpen(t.s, t.s.epoch, id, {
+      partial: () => {},
+      turn: () => {},
+      final: () => {},
+      error: () => {},
+      gap: () => {},
+      closed: () => {},
+    });
+    t.e.voiceClose(t.s);
+    expect(() =>
+      t.e.voiceOpen(t.s, t.s.epoch, id, {
+        partial: () => {},
+        turn: () => {},
+        final: () => {},
+        error: () => {},
+        gap: () => {},
+        closed: () => {},
+      }),
+    ).toThrowError(expect.objectContaining({ code: "DUPLICATE" }));
+    t.s.calls = 40;
+    expect(() => t.open()).toThrowError(
+      expect.objectContaining({ code: "APP_LIMIT" }),
+    );
+  });
+  it("streams ready audio to the provider and charges finalized turns", async () => {
+    const t = voice();
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    t.open();
+    t.ack();
+    t.e.voiceFrame(t.s, new Uint8Array([7, 7]));
+    expect(
+      t.sockets[0].sent.filter((x) => x instanceof Uint8Array),
+    ).toHaveLength(1);
+    t.sockets[0].onmessage!({
+      data: JSON.stringify({ type: "transcript", transcript: "salt?" }),
+    });
+    t.sockets[0].onmessage!({
+      data: JSON.stringify({ type: "transcript", transcript: "salt?", final: true }),
+    });
+    expect(t.sink).toEqual(["partial:salt?", "final:salt?"]);
+    expect(t.s.calls).toBe(1);
+  });
+  it("ends input on end control and rejects oversized frames", async () => {
+    const t = voice();
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    t.open();
+    t.ack();
+    t.e.voiceFrame(t.s, JSON.stringify({ type: "end" }));
+    expect(JSON.parse(t.sockets[0].sent.at(-1) as string)).toEqual({
+      type: "endStream",
+    });
+    expect(() => t.e.voiceFrame(t.s, new Uint8Array(200000))).toThrowError(
+      expect.objectContaining({ code: "AUDIO_INVALID" }),
+    );
+    expect(() => t.e.voiceFrame(t.s, "{oops")).toThrowError();
+  });
+  it("discards stale audio after an epoch change and closes the socket", async () => {
+    const t = voice();
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    t.open();
+    t.ack();
+    t.e.phase(t.s, "paused");
+    expect(t.sockets[0].closed).toBe(true);
+    expect(() => t.e.voiceFrame(t.s, new Uint8Array([1]))).toThrowError(
+      expect.objectContaining({ code: "CANCELED" }),
+    );
+  });
+  it("pauses the stream with notice when the allowance runs out mid-turn", async () => {
+    const t = voice();
+    await t.e.connect(t.s, "TEST_ONLY_KEY");
+    t.open();
+    t.ack();
+    t.s.calls = 40;
+    t.sockets[0].onmessage!({
+      data: JSON.stringify({ type: "transcript", transcript: "go", final: true }),
+    });
+    expect(t.sink).toEqual(["closed:1000:false:allowance-exhausted"]);
+  });
+  it("logs a server voice-stream span for finalized turns", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const t = voice();
+      await t.e.connect(t.s, "TEST_ONLY_KEY");
+      t.open();
+      t.ack();
+      t.sockets[0].onmessage!({
+        data: JSON.stringify({
+          type: "transcript",
+          transcript: "go",
+          final: true,
+        }),
+      });
+      expect(
+        info.mock.calls
+          .map((call) => String(call[0]))
+          .some((line) => line.includes('"lane":"voice-stream"')),
+      ).toBe(true);
+    } finally {
+      info.mockRestore();
+    }
+  });
+});
