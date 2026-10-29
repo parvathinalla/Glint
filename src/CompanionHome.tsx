@@ -24,6 +24,7 @@ import type { VisualEvent } from "../shared/visual-events.ts";
 import { useMicrophone } from "./microphone.ts";
 import { streamAgent } from "./agent-stream.ts";
 import { SpeechQueue } from "./speech-queue.ts";
+import { BargeGuard } from "./barge-guard.ts";
 import { logTiming, type VoiceTurnTiming } from "../shared/timing.ts";
 import type { View } from "../shared/model.ts";
 import {
@@ -107,8 +108,11 @@ export function CompanionHome({
   const speech = useRef<SpeechQueue | null>(null);
   const pendingVoice = useRef<{ capturedStartMs: number } | null>(null);
   const activeVoice = useRef<VoiceTurnTiming | null>(null);
+  const bargeGuard = useRef<BargeGuard | null>(null);
+  if (!bargeGuard.current) bargeGuard.current = new BargeGuard();
   if (!speech.current)
     speech.current = new SpeechQueue(setSpeaking, () => {
+      bargeGuard.current?.markSpoke();
       const timing = activeVoice.current;
       if (timing && timing.playbackStartMs === undefined)
         timing.playbackStartMs = Date.now();
@@ -305,9 +309,13 @@ export function CompanionHome({
     }
   }
   const mic = useMicrophone(
-    (audio) => void send("", undefined, camera.active, audio),
+    (audio) => {
+      if (bargeGuard.current?.turnReady()) return;
+      void send("", undefined, camera.active, audio);
+    },
     onProblem,
     () => {
+      if (bargeGuard.current?.turnStarted()) return;
       pendingVoice.current = { capturedStartMs: Date.now() };
       if (lock.current || speaking) void interrupt(false);
     },
