@@ -38,7 +38,7 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
     const intro = page.getByTestId("opening");
     await expect(intro).toHaveAttribute("data-phase", "walking");
     await expect(
-      page.getByRole("heading", { name: /What are we working on/ }),
+      page.getByLabel("Message Glint"),
     ).not.toBeVisible();
     await expect(page.locator(".site-entrance")).toHaveAttribute("inert", "");
     await expect(page.locator(".opening-profile")).toHaveCSS("opacity", "1");
@@ -82,7 +82,7 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
     await page.clock.runFor(530);
     await expect(intro).toHaveCount(0);
     await expect(
-      page.getByRole("heading", { name: /What are we working on/ }),
+      page.getByLabel("Message Glint"),
     ).toBeVisible();
     await expect(page.locator("main")).toBeFocused();
     await page.screenshot({
@@ -170,7 +170,7 @@ test("mobile opening stays within the viewport and reveals without layout overfl
   await page.clock.runFor(600);
   await expect(page.getByTestId("opening")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: /What are we working on/ }),
+    page.getByLabel("Message Glint"),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -189,7 +189,7 @@ test("reduced motion bypasses the walk and light; keyboard skip releases the sit
   await page.goto("/");
   await expect(page.getByTestId("opening")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: /What are we working on/ }),
+    page.getByLabel("Message Glint"),
   ).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.reload();

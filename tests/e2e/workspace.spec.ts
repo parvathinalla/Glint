@@ -6,7 +6,7 @@ test("welcome, source confirmation, replay, progress, and alternate order", asyn
   await page.goto("/");
   await expect(page.getByTestId("opening")).toHaveCount(0, { timeout: 10000 });
   await expect(
-    page.getByRole("heading", { name: /What are we working on/ }),
+    page.getByLabel("Message Glint"),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/glint-welcome-desktop.png",
@@ -30,6 +30,7 @@ test("welcome, source confirmation, replay, progress, and alternate order", asyn
     page.getByRole("button", { name: "Start replay" }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "View instructions" }).click();
+  await expect(page.locator(".modal .source-text")).toBeVisible();
   await expect(
     page.getByText("ORIGINAL DEMO · NOT A MANUFACTURER MANUAL", {
       exact: true,
@@ -181,7 +182,7 @@ test("mobile layout and reduced motion", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("opening")).toHaveCount(0, { timeout: 10000 });
   await expect(
-    page.getByRole("heading", { name: /What are we working on/ }),
+    page.getByLabel("Message Glint"),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -218,7 +219,7 @@ test("critical flows meet automated WCAG checks and private server data is not s
   await page.goto("/");
   await expect(page.getByTestId("opening")).toHaveCount(0, { timeout: 10000 });
   await expect(
-    page.getByRole("heading", { name: /What are we working on/ }),
+    page.getByLabel("Message Glint"),
   ).toBeVisible();
   let result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -280,6 +281,7 @@ test("key and source dialogs expose accessible names and readable controls", asy
     .getByRole("button", { name: "Try desk organizer example" })
     .click();
   await page.getByRole("button", { name: "View instructions" }).click();
+  await expect(page.locator(".modal .source-text")).toBeVisible();
   result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();

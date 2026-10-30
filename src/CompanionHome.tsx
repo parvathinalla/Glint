@@ -752,37 +752,11 @@ export function CompanionHome({
   }, [fullscreen]);
   return (
     <section className="companion-home" aria-label="Talk with Glint">
+      <div className="hero-avatar">
+        <Spark state={speaking ? "speaking" : busy ? "thinking" : "ready"} />
+      </div>
       <div className="companion-stage">
-        <div className="hero-avatar">
-          <Spark state={speaking ? "speaking" : busy ? "thinking" : "ready"} />
-        </div>
-        <h1>What are we working on?</h1>
-        <p>Tell me, or show me with your camera.</p>
         <div className="companion-controls">
-          <button
-            className="button"
-            disabled={camera.starting}
-            onClick={() => {
-              if (camera.active) {
-                camera.stop();
-                void interrupt(false, true);
-              } else {
-                setProblem("");
-                void camera.start().then((ok) => {
-                  if (ok) enterFullscreen();
-                  else if (view.key.connected && !mic.enabled)
-                    void mic.start();
-                });
-              }
-            }}
-          >
-            {camera.active ? <CameraOff size={18} /> : <Camera size={18} />}
-            {camera.starting
-              ? "Opening camera…"
-              : camera.active
-                ? "Stop camera"
-                : "Open camera"}
-          </button>
           <button
             className="icon-button"
             aria-label={
@@ -996,31 +970,66 @@ export function CompanionHome({
               <ArrowUp size={20} />
             </button>
           </form>
-          <button
-            className={`button primary talk-button ${mic.enabled ? "recording" : ""}`}
-            aria-label={mic.enabled ? "End voice chat" : "Talk to Glint"}
-            aria-pressed={mic.enabled}
-            disabled={mic.preparing || !online}
-            onClick={() => {
-              speech.current?.unlock();
-              if (!view.key.connected) {
-                connect();
-                return;
+          <div className="composer-actions">
+            <button
+              className={`button primary talk-button ${mic.enabled ? "recording" : ""}`}
+              aria-label={mic.enabled ? "End voice chat" : "Talk to Glint"}
+              aria-pressed={mic.enabled}
+              disabled={mic.preparing || !online}
+              onClick={() => {
+                speech.current?.unlock();
+                if (!view.key.connected) {
+                  connect();
+                  return;
+                }
+                stopSpeech();
+                if (mic.enabled) void interrupt(true);
+                else void mic.start();
+              }}
+            >
+              {mic.enabled ? <Square size={18} /> : <Mic size={18} />}
+              <span className="talk-label">
+                {mic.enabled
+                  ? "End voice chat"
+                  : mic.preparing
+                    ? "Preparing…"
+                    : "Talk to Glint"}
+              </span>
+            </button>
+            <button
+              className="button camera-button"
+              aria-label={
+                camera.starting
+                  ? "Opening camera…"
+                  : camera.active
+                    ? "Stop camera"
+                    : "Open camera"
               }
-              stopSpeech();
-              if (mic.enabled) void interrupt(true);
-              else void mic.start();
-            }}
-          >
-            {mic.enabled ? <Square size={18} /> : <Mic size={18} />}
-            <span className="talk-label">
-              {mic.enabled
-                ? "End voice chat"
-                : mic.preparing
-                  ? "Preparing…"
-                  : "Talk to Glint"}
-            </span>
-          </button>
+              disabled={camera.starting}
+              onClick={() => {
+                if (camera.active) {
+                  camera.stop();
+                  void interrupt(false, true);
+                } else {
+                  setProblem("");
+                  void camera.start().then((ok) => {
+                    if (ok) enterFullscreen();
+                    else if (view.key.connected && !mic.enabled)
+                      void mic.start();
+                  });
+                }
+              }}
+            >
+              {camera.active ? <CameraOff size={18} /> : <Camera size={18} />}
+              <span className="talk-label">
+                {camera.starting
+                  ? "Opening camera…"
+                  : camera.active
+                    ? "Stop camera"
+                    : "Open camera"}
+              </span>
+            </button>
+          </div>
         </div>
         <p className="companion-note">
           Voice listens until you end the chat. Glint replies aloud as the

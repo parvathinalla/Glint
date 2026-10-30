@@ -138,6 +138,10 @@ summary:focus-visible {
 .connection-details {
   color: #adc1da !important;
 }
+.modal .source-text {
+  background: #0a1320;
+  border: 1px solid #30445f;
+}
 .modal form > input + .button {
   margin-top: 16px;
 }
@@ -276,11 +280,25 @@ summary:focus-visible {
   white-space: nowrap;
   border-radius: 14px;
 }
+.message-composer .composer-actions {
+  margin-top: 0;
+  gap: 10px;
+  flex-shrink: 0;
+}
 @media (max-width: 600px) {
   .message-composer {
     gap: 8px;
   }
+  .message-composer .composer-actions {
+    gap: 8px;
+  }
   .message-composer .talk-button {
+    width: 54px;
+    padding: 12px;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .message-composer .camera-button {
     width: 54px;
     padding: 12px;
     justify-content: center;

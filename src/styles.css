@@ -12,27 +12,26 @@
 .companion-home {
   max-width: 1000px;
   margin: 16px auto 40px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 20px;
+  align-items: start;
 }
 .companion-stage {
   text-align: center;
-  padding: 10px 0 20px;
+  padding: 0 0 16px;
 }
 .hero-avatar {
-  width: 176px;
-  height: 184px;
-  margin: 0 auto;
+  width: 104px;
+  height: 112px;
+  margin: 0;
   display: grid;
   place-items: center;
+  grid-row: 1 / span 2;
 }
 .hero-avatar .spark {
-  width: 162px;
-  height: 182px;
-}
-.companion-stage h1 {
-  font:
-    400 32px/1.3 Georgia,
-    serif;
-  letter-spacing: -0.7px;
+  width: 96px;
+  height: 108px;
 }
 .companion-stage > p {
   margin: 12px auto 0;
@@ -44,11 +43,7 @@
   justify-content: center;
   align-items: center;
   gap: 12px;
-  margin: 26px 0 0;
-}
-.companion-controls .button {
-  min-height: 46px;
-  font-size: 13px;
+  margin: 6px 0 0;
 }
 .companion-stage > .companion-status {
   font-size: 12px;
@@ -208,6 +203,16 @@
   padding: 10px;
   justify-content: center;
 }
+.composer-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.composer-actions .button {
+  flex: 1;
+  min-height: 46px;
+  white-space: nowrap;
+}
 .companion-note {
   color: #59674e;
   font-size: 11px;
@@ -241,24 +246,22 @@
 @media (max-width: 600px) {
   .companion-home {
     margin-top: 0;
+    gap: 4px 12px;
   }
   .hero-avatar {
-    width: 144px;
-    height: 150px;
+    width: 64px;
+    height: 72px;
   }
   .hero-avatar .spark {
-    width: 132px;
-    height: 148px;
-  }
-  .companion-stage h1 {
-    font-size: 27px;
+    width: 58px;
+    height: 66px;
   }
   .companion-controls {
     gap: 8px;
   }
-  .companion-controls .button {
+  .composer-actions .button {
     font-size: 12px;
-    padding: 12px;
+    padding: 12px 8px;
   }
   .companion-stage > p {
     font-size: 13px;

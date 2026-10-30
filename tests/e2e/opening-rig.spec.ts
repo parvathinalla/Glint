@@ -86,7 +86,7 @@ for (const [name, width, height] of [
     await page.clock.runFor(1500);
     await expect(page.getByTestId("opening")).toHaveCount(0);
     await expect(
-      page.getByRole("heading", { name: /What are we working on/ }),
+      page.getByLabel("Message Glint"),
     ).toBeVisible();
   });
 }
