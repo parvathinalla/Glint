@@ -88,6 +88,50 @@
   background: #fffef9;
   color: #264732;
 }
+.companion-camera.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  max-width: none;
+  margin: 0;
+  border-radius: 0;
+  padding-bottom: 0;
+  background: #000;
+}
+.companion-camera.is-fullscreen video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  margin-bottom: 0;
+  object-fit: cover;
+}
+.companion-camera.is-fullscreen .button {
+  position: absolute;
+  left: 16px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+}
+.companion-camera .fullscreen-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+}
+.companion-subtitles {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(84px, calc(env(safe-area-inset-bottom) + 64px));
+  max-width: min(90%, 640px);
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: clamp(16px, 2.5vw, 22px);
+  line-height: 1.4;
+  text-align: center;
+}
 .live-caption {
   position: absolute;
   top: 12px;

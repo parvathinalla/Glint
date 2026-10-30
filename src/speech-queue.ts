@@ -23,7 +23,7 @@ export class SpeechQueue {
   private voicesArmed = false;
   constructor(
     private changed: (speaking: boolean) => void,
-    private onSpeak?: () => void,
+    private onSpeak?: (phrase: string) => void,
   ) {}
   /**
    * Unlock platform speech from inside a user-gesture handler (required on
@@ -114,7 +114,7 @@ export class SpeechQueue {
         this.changed(false);
       }
     };
-    this.onSpeak?.();
+    this.onSpeak?.(text);
     if (window.speechSynthesis.paused) window.speechSynthesis.resume?.();
     window.speechSynthesis.speak(utterance);
   }

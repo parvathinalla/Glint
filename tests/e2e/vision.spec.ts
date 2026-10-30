@@ -160,6 +160,9 @@ test("camera observes activity without a question, reacts to a hand, and sends f
   await page.goto("/");
   await page.getByRole("button", { name: "Mute spoken replies" }).click();
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Exit full screen camera", exact: true })
+    .click();
   await expect.poll(() => observations, { timeout: 15000 }).toBeGreaterThan(0);
   await expect(
     page.getByText("Seeing: stirring ingredients in a bowl", { exact: true }),

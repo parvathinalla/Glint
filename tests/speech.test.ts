@@ -184,3 +184,33 @@ it("chunks long phrases so no utterance exceeds the iOS-safe length", () => {
     expect(utterance.text.length).toBeLessThanOrEqual(200);
   expect(spoken.map((utterance) => utterance.text).join(" ")).toBe(words);
 });
+it("reports each spoken phrase as it starts", () => {
+  const phrases: string[] = [];
+  const spoken: { text: string; onend: () => void }[] = [];
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      getVoices: () => [],
+      addEventListener: () => {},
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      resume: () => {},
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      onend: () => void = () => {};
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(
+    () => {},
+    (phrase) => phrases.push(phrase),
+  );
+  queue.push("First. Second. ");
+  queue.finish();
+  expect(phrases).toEqual(["First."]);
+  spoken[0].onend();
+  expect(phrases).toEqual(["First.", "Second."]);
+});

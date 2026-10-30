@@ -9,13 +9,15 @@ import {
   ArrowUp,
   Camera,
   CameraOff,
+  Captions,
   Link,
+  LoaderCircle,
+  Maximize,
   Mic,
   Square,
   Volume2,
   VolumeX,
   X,
-  LoaderCircle,
 } from "lucide-react";
 import { Spark } from "./Art.tsx";
 import { asDataUrl, useCamera, encodeCameraFrames } from "./camera.ts";
@@ -30,6 +32,11 @@ import {
   VoiceClient,
   isStreamingVoiceEnabled,
 } from "./voice-stream.ts";
+import { isEchoTranscript } from "./echo.ts";
+import {
+  loadSubtitlesEnabled,
+  saveSubtitlesEnabled,
+} from "./subtitles.ts";
 import { logTiming, type VoiceTurnTiming } from "../shared/timing.ts";
 import type { View } from "../shared/model.ts";
 import {
@@ -104,6 +111,9 @@ export function CompanionHome({
   const [messages, setMessages] = useState<Message[]>([]),
     [question, setQuestion] = useState("");
   const [partial, setPartial] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [subtitle, setSubtitle] = useState("");
+  const [subsOn, setSubsOn] = useState(loadSubtitlesEnabled);
   const [busy, setBusy] = useState(false),
     [speaking, setSpeaking] = useState(false),
     [readAloud, setReadAloud] = useState(true);
@@ -126,16 +136,18 @@ export function CompanionHome({
   const pendingVoice = useRef<{
     capturedStartMs: number;
     asrFirstPartialMs?: number;
+    duringSpeech: boolean;
   } | null>(null);
   const activeVoice = useRef<VoiceTurnTiming | null>(null);
   const bargeGuard = useRef<BargeGuard | null>(null);
   if (!bargeGuard.current) bargeGuard.current = new BargeGuard();
   if (!speech.current)
-    speech.current = new SpeechQueue(setSpeaking, () => {
+    speech.current = new SpeechQueue(setSpeaking, (phrase) => {
       bargeGuard.current?.markSpoke();
       const timing = activeVoice.current;
       if (timing && timing.playbackStartMs === undefined)
         timing.playbackStartMs = Date.now();
+      setSubtitle(phrase);
     });
   const pause = useRef<Promise<void> | null>(null);
   const stopSpeech = useCallback(() => speech.current?.cancel(), []);
@@ -163,6 +175,7 @@ export function CompanionHome({
     setProblem("");
     setFailed(null);
     stopSpeech();
+    let echoSuspect = false;
     if (voiceInput) {
       activeVoice.current = {
         kind: "voice-turn",
@@ -173,6 +186,7 @@ export function CompanionHome({
       const firstPartial = pendingVoice.current?.asrFirstPartialMs;
       if (firstPartial !== undefined)
         activeVoice.current.asrFirstPartialMs = firstPartial;
+      echoSuspect = pendingVoice.current?.duringSpeech ?? false;
       pendingVoice.current = null;
     }
     try {
@@ -196,6 +210,19 @@ export function CompanionHome({
         text = result.transcript;
         if (activeVoice.current)
           activeVoice.current.asrFinalMs = Date.now();
+      }
+      if (voiceInput && echoSuspect && !instructionsUrl) {
+        const glint = messages
+          .filter((item) => item.who === "glint")
+          .slice(-3)
+          .map((item) => item.text);
+        if (isEchoTranscript(text, glint)) {
+          // Speaker echo, not the user: answer nothing and keep it out of
+          // the timing baseline. Fail-open — a real turn is never dropped
+          // for a missing speech flag.
+          activeVoice.current = null;
+          return;
+        }
       }
       let image: string | undefined,
         capturedAt: number | undefined,
@@ -357,7 +384,10 @@ export function CompanionHome({
     onProblem,
     () => {
       if (bargeGuard.current?.turnStarted()) return;
-      pendingVoice.current = { capturedStartMs: Date.now() };
+      pendingVoice.current = {
+        capturedStartMs: Date.now(),
+        duringSpeech: speaking,
+      };
       if (streamingMode.current) {
         const flush = turns.current.started();
         if (flush) {
@@ -610,6 +640,7 @@ export function CompanionHome({
       if (!turns.current.finalArrived()) return;
       setPartial("");
       voice.current?.closeStream();
+      if (!transcript.trim()) return;
       void sendRef.current(transcript, undefined, cameraActive.current, {
         asrFinalMs: Date.now(),
       });
@@ -695,6 +726,30 @@ export function CompanionHome({
       : busy
         ? "processing"
         : "idle";
+  const enterFullscreen = () => {
+    setFullscreen(true);
+    if (view.key.connected && !mic.enabled) void mic.start();
+    else if (!view.key.connected) connect();
+  };
+  useEffect(() => {
+    if (!speaking) setSubtitle("");
+  }, [speaking]);
+  useEffect(() => {
+    if (!camera.active && !camera.starting) setFullscreen(false);
+  }, [camera.active, camera.starting]);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [fullscreen]);
   return (
     <section className="companion-home" aria-label="Talk with Glint">
       <div className="companion-stage">
@@ -713,8 +768,11 @@ export function CompanionHome({
                 void interrupt(false, true);
               } else {
                 setProblem("");
-                void camera.start();
-                if (view.key.connected && !mic.enabled) void mic.start();
+                void camera.start().then((ok) => {
+                  if (ok) enterFullscreen();
+                  else if (view.key.connected && !mic.enabled)
+                    void mic.start();
+                });
               }
             }}
           >
@@ -759,7 +817,7 @@ export function CompanionHome({
           </button>
         )}
         <div
-          className={`companion-camera ${camera.active || camera.starting ? "is-active" : ""}`}
+          className={`companion-camera ${camera.active || camera.starting ? "is-active" : ""} ${fullscreen ? "is-fullscreen" : ""}`}
         >
           <video
             ref={camera.video}
@@ -786,6 +844,44 @@ export function CompanionHome({
               >
                 <Camera size={16} /> Ask about this view
               </button>
+              {fullscreen ? (
+                <div className="fullscreen-bar">
+                  <button
+                    className="icon-button"
+                    aria-label={
+                      subsOn ? "Turn subtitles off" : "Turn subtitles on"
+                    }
+                    aria-pressed={subsOn}
+                    onClick={() => {
+                      const next = !subsOn;
+                      setSubsOn(next);
+                      saveSubtitlesEnabled(next);
+                    }}
+                  >
+                    <Captions size={19} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    aria-label="Exit full screen camera"
+                    onClick={() => setFullscreen(false)}
+                  >
+                    <X size={19} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="icon-button"
+                  aria-label="View camera full screen"
+                  onClick={enterFullscreen}
+                >
+                  <Maximize size={16} />
+                </button>
+              )}
+              {fullscreen && subsOn && subtitle && (
+                <p className="companion-subtitles" aria-hidden="true">
+                  {subtitle}
+                </p>
+              )}
             </>
           )}
         </div>

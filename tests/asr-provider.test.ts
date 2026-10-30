@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { WebSocket } from "ws";
 import {
   backoffMs,
   RealtimeSession,
   VoiceStream,
+  wsSocket,
   type AsrEvents,
   type AsrSocket,
 } from "../server/asr-provider.ts";
@@ -346,6 +348,22 @@ describe("voice stream lifecycle", () => {
     expect(t.events).toEqual(["closed:1000:false:allowance-exhausted"]);
     expect(t.charged()).toBe(0);
   });
+  it("logs provider close codes for live diagnosis", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const t = streamSetup();
+      t.stream.open();
+      t.ack(t.sockets[0]);
+      t.sockets[0].serverClose(1008);
+      expect(
+        warn.mock.calls
+          .map((call) => String(call[0]))
+          .some((line) => line.includes("code=1008")),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
   it("ends input cleanly and reports the normal close", () => {
     const t = streamSetup();
     t.stream.open();
@@ -375,6 +393,25 @@ describe("voice stream lifecycle", () => {
     t.stream.end();
     t.stream.audio(new Uint8Array([1]));
     expect(t.binary(t.sockets[0])).toHaveLength(0);
+  });
+});
+
+describe("production socket", () => {
+  it("races address families so broken IPv6 cannot sink realtime", () => {
+    let seen: unknown;
+    class FakeWs {
+      constructor(_url: unknown, _protocols: unknown, options: unknown) {
+        seen = options;
+      }
+      on() {}
+      send() {}
+      close() {}
+    }
+    wsSocket(
+      "wss://api.meta.ai/v1/asr/realtime",
+      FakeWs as unknown as typeof WebSocket,
+    );
+    expect(seen).toMatchObject({ autoSelectFamily: true });
   });
 });
 

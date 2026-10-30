@@ -116,8 +116,13 @@ test("camera is available immediately without task setup or a model key", async 
   await page.getByLabel("Message Glint").fill("Draft camera check");
   await page.getByRole("button", { name: "Open camera", exact: true }).click();
   await expect(
+    page.getByRole("dialog", { name: "Meta Model API" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await expect(
     page.getByRole("button", { name: "Stop camera", exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".companion-camera.is-fullscreen")).toBeVisible();
   await expect
     .poll(() =>
       page
@@ -146,6 +151,10 @@ test("camera is available immediately without task setup or a model key", async 
     path: "test-results/glint-companion-camera.png",
     fullPage: true,
   });
+  await page
+    .getByRole("button", { name: "Exit full screen camera", exact: true })
+    .click();
+  await expect(page.locator(".companion-camera.is-fullscreen")).toHaveCount(0);
   await page.getByRole("button", { name: "Stop camera", exact: true }).click();
   expect(
     await page
@@ -157,6 +166,62 @@ test("camera is available immediately without task setup or a model key", async 
     .click();
   await expect(
     page.getByRole("dialog", { name: "Meta Model API" }),
+  ).toBeVisible();
+});
+
+test("fullscreen camera subtitles spoken replies with a CC toggle", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["camera", "microphone"]);
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "speechSynthesis", {
+      value: { paused: false, speak: () => {}, cancel: () => {} },
+    });
+  });
+  let state: Record<string, unknown>;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        message: "I can help with that. ",
+        sources: [],
+        searched: false,
+        epoch: body.epoch,
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await expect(page.locator(".companion-camera.is-fullscreen")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "End voice chat", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Ask about this view", exact: true })
+    .click();
+  const subtitles = page.locator(".companion-subtitles");
+  await expect(subtitles).toHaveText("I can help with that.");
+  await page
+    .getByRole("button", { name: "Turn subtitles off", exact: true })
+    .click();
+  await expect(subtitles).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Turn subtitles on", exact: true })
+    .click();
+  await expect(subtitles).toHaveText("I can help with that.");
+  await page
+    .getByRole("button", { name: "Exit full screen camera", exact: true })
+    .click();
+  await expect(page.locator(".companion-camera.is-fullscreen")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Stop camera", exact: true }),
   ).toBeVisible();
 });
 
@@ -451,6 +516,100 @@ test("voice can interrupt read-aloud and continue with a new automatic turn", as
   await expect(
     page.getByRole("button", { name: "Talk to Glint", exact: true }),
   ).toBeVisible();
+});
+
+test("speaker echo is transcribed but never answered (loop breaker)", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    const fixture = window as unknown as { spoken: string[] };
+    fixture.spoken = [];
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {},
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    agentRequests = 0,
+    voiceRequests = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    const request = route.request().postDataJSON();
+    voiceRequests++;
+    await route.fulfill({
+      json: {
+        transcript:
+          voiceRequests === 1
+            ? "Help me build this organizer."
+            : "I can help with that",
+        epoch: request.epoch,
+      },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const body = route.request().postDataJSON();
+    agentRequests++;
+    await route.fulfill({
+      json: {
+        message: "I can help with that. ",
+        sources: [],
+        searched: false,
+        epoch: body.epoch,
+      },
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    (
+      window as unknown as { voiceFixture: { say: () => void } }
+    ).voiceFixture.say(),
+  );
+  await expect(
+    page.getByText("Help me build this organizer.", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as unknown as { spoken: string[] }).spoken.length,
+        ),
+      { timeout: 10000 },
+    )
+    .toBe(1);
+  await page.waitForTimeout(600);
+  await page.evaluate(() =>
+    (
+      window as unknown as { voiceFixture: { say: () => void } }
+    ).voiceFixture.say(),
+  );
+  // The echo turn completes transcription and is then dropped silently.
+  await page.waitForTimeout(3500);
+  expect(voiceRequests).toBe(2);
+  expect(agentRequests).toBe(1);
+  await expect(page.locator(".companion-message.from-you")).toHaveCount(1);
 });
 
 test("muting a streamed reply prevents later sentences from being spoken", async ({

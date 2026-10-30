@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { Engine } from "../server/engine.ts";
 import { Store } from "../server/store.ts";
@@ -116,37 +116,43 @@ describe("/voice-stream transport", () => {
     });
   });
   it("rejects opens without a key, with a stale epoch, or on a busy lane", async () => {
-    const t = setup();
-    t.client.receive(
-      JSON.stringify({ type: "open", requestId: randomUUID(), epoch: t.session.epoch }),
-    );
-    expect(t.client.sent).toEqual([
-      {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const t = setup();
+      const open = (epoch: number) =>
+        t.client.receive(
+          JSON.stringify({ type: "open", requestId: randomUUID(), epoch }),
+        );
+      open(t.session.epoch);
+      expect(t.client.sent).toEqual([
+        {
+          type: "error",
+          code: "KEY_REQUIRED",
+          message: expect.any(String),
+        },
+      ]);
+      expect(t.client.closed).toBeUndefined();
+      await t.engine.connect(t.session, "TEST_ONLY_KEY");
+      open(99);
+      expect(t.client.sent.at(-1)).toMatchObject({
         type: "error",
-        code: "KEY_REQUIRED",
-        message: expect.any(String),
-      },
-    ]);
-    expect(t.client.closed).toBeUndefined();
-    await t.engine.connect(t.session, "TEST_ONLY_KEY");
-    t.client.receive(
-      JSON.stringify({ type: "open", requestId: randomUUID(), epoch: 99 }),
-    );
-    expect(t.client.sent.at(-1)).toMatchObject({
-      type: "error",
-      code: "CANCELED",
-    });
-    t.client.receive(
-      JSON.stringify({ type: "open", requestId: randomUUID(), epoch: t.session.epoch }),
-    );
-    expect(t.client.sent.at(-1)).toEqual({ type: "opened" });
-    t.client.receive(
-      JSON.stringify({ type: "open", requestId: randomUUID(), epoch: t.session.epoch }),
-    );
-    expect(t.client.sent.at(-1)).toMatchObject({
-      type: "error",
-      code: "BUSY",
-    });
+        code: "CANCELED",
+      });
+      open(t.session.epoch);
+      expect(t.client.sent.at(-1)).toEqual({ type: "opened" });
+      open(t.session.epoch);
+      expect(t.client.sent.at(-1)).toMatchObject({
+        type: "error",
+        code: "BUSY",
+      });
+      expect(
+        warn.mock.calls
+          .map((call) => String(call[0]))
+          .some((line) => line.includes("KEY_REQUIRED")),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
   it("rejects oversized frames, malformed control, and end without a stream", async () => {
     const t = setup();

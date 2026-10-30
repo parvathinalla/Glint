@@ -27,9 +27,23 @@ export type AsrSocket = {
 };
 export type AsrSocketFactory = (url: string) => AsrSocket;
 
+/**
+ * Connect options for the realtime host: api.meta.ai serves the wrong TLS
+ * certificate on IPv6, so race both families and fail over to IPv4.
+ */
+export const WS_CONNECT_OPTIONS = {
+  autoSelectFamily: true,
+  autoSelectFamilyAttemptTimeout: 250,
+};
+
 /** Production socket factory over the ws package. */
-export function wsSocket(url: string): AsrSocket {
-  const socket = new WebSocket(url);
+export function wsSocket(
+  url: string,
+  ctor: typeof WebSocket = WebSocket,
+): AsrSocket {
+  // The runtime forwards these to net.connect; @types/ws just lags behind.
+  type WsOptions = ConstructorParameters<typeof WebSocket>[2];
+  const socket = new ctor(url, undefined, WS_CONNECT_OPTIONS as WsOptions);
   const adapted: AsrSocket = {
     send: (data) => socket.send(data),
     close: (code, reason) => socket.close(code, reason),
@@ -371,6 +385,7 @@ export class VoiceStream {
       this.closed = true;
       this.session?.close();
       this.session = null;
+      console.warn("[glint-voice] turn not charged (allowance exhausted)");
       this.events.onClosed({
         code: 1000,
         retryable: false,
@@ -385,6 +400,9 @@ export class VoiceStream {
     const terminal = (reason?: string) => {
       this.closed = true;
       this.session = null;
+      console.warn(
+        `[glint-voice] provider close code=${info.code} retryable=${info.retryable} action=terminal${reason ? ` reason=${reason}` : ""}`,
+      );
       this.events.onClosed({ code: info.code, retryable: false, reason });
     };
     if (!info.retryable || this.endRequested || this.finalized) {
@@ -398,6 +416,9 @@ export class VoiceStream {
       return;
     }
     const delay = backoffMs(this.attempt++, this.options.rand ?? Math.random);
+    console.info(
+      `[glint-voice] provider close code=${info.code} action=reconnect delayMs=${delay}`,
+    );
     const sleep = this.options.sleep ?? defaultSleep;
     void (async () => {
       try {

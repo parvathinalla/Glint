@@ -564,12 +564,16 @@ export class Engine {
   }
   voiceOpen(s: Session, epoch: number, requestId: string, sink: VoiceSink) {
     this.expireKey(s);
-    if (s.epoch !== epoch)
+    if (s.epoch !== epoch) {
+      console.warn(
+        `[glint-voice] open rejected want=${epoch} have=${s.epoch} key=${!!s.key}`,
+      );
       throw new Problem(
         409,
         "CANCELED",
         "The session changed. Please try again.",
       );
+    }
     if (!s.key)
       throw new Problem(
         401,

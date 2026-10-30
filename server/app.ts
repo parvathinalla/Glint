@@ -99,22 +99,26 @@ export function handleVoiceSocket(
     }
   };
   const fail = (error: unknown) => {
-    if (error instanceof Problem)
+    if (error instanceof Problem) {
+      console.warn(`[glint-voice] request failed: ${error.code}`);
       send({ type: "error", code: error.code, message: error.message });
-    else if (error instanceof z.ZodError)
+    } else if (error instanceof z.ZodError) {
+      console.warn("[glint-voice] request failed: INVALID_INPUT");
       send({
         type: "error",
         code: "INVALID_INPUT",
         message:
           "Some fields are missing or invalid. Review the form and try again.",
       });
-    else
+    } else {
+      console.warn("[glint-voice] request failed: UNAVAILABLE");
       send({
         type: "error",
         code: "UNAVAILABLE",
         message:
           "The operation could not finish. Nothing was retried automatically.",
       });
+    }
   };
   client.on("message", (data) => {
     try {
@@ -158,6 +162,7 @@ export function handleVoiceSocket(
           closed: (info) => send({ type: "closed", ...info }),
         });
         send({ type: "opened" });
+        console.info("[glint-voice] open ok");
       } else if (control.type === "end") {
         engine.voiceFrame(session, JSON.stringify({ type: "end" }));
       } else {
@@ -168,7 +173,10 @@ export function handleVoiceSocket(
       fail(error);
     }
   });
-  client.on("close", () => engine.voiceClose(session));
+  client.on("close", () => {
+    console.info("[glint-voice] browser socket closed");
+    engine.voiceClose(session);
+  });
 }
 export function createApp(engine: Engine, origin: string, production = false) {
   const app = express();

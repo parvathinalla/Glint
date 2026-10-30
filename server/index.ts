@@ -61,6 +61,8 @@ server.on("upgrade", (req, socket, head) => {
   if (req.url !== "/events" && req.url !== "/voice-stream") return;
   const session = engine.existing(cookieToken(req.headers.cookie));
   if (!session || req.headers.origin !== origin) {
+    if (req.url === "/voice-stream")
+      console.warn("[glint-voice] upgrade rejected (session or origin)");
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
