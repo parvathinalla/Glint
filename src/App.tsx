@@ -36,7 +36,6 @@ import { Organizer, Spark } from "./Art.tsx";
 import { asDataUrl, useCamera } from "./camera.ts";
 import { CompanionHome } from "./CompanionHome.tsx";
 import { saveKeyGateDismissed } from "./key-gate.ts";
-import Opening from "./Opening.tsx";
 
 type Message = {
   id: string;
@@ -374,7 +373,6 @@ export default function App() {
   const fresh = feedback && now + clockOffset.current < feedback.expiresAt;
 
   return (
-    <Opening>
     <div className="app-shell">
       <main tabIndex={-1}>
         {page !== "home" && <header className="topbar">
@@ -1111,6 +1109,5 @@ export default function App() {
         </Modal>
       )}
     </div>
-    </Opening>
   );
 }

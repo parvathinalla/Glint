@@ -1157,7 +1157,7 @@ export function CompanionHome({
               {problem && !conversationOpen && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}<button className="glint-round" aria-label="Dismiss conversation message" onClick={() => setProblem("")}><X size={17}/></button></div>}
             </div>
           </div>
-          {started && !fullscreen && <div className="glint-session-dock">{controls}<div className="glint-quick-compose"><button onClick={() => setConversationOpen(true)}><MessageCircle size={17}/> Or type a message… <ArrowUp size={17}/></button></div></div>}
+          {started && !fullscreen && <div className="glint-session-dock">{controls}</div>}
         </div>
         <footer className="glint-attribution"><Sparkles size={13}/> Built with Meta models <span>See · Understand · Guide</span></footer>
       </>}

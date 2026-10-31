@@ -1,60 +1,48 @@
-export function Spark({
-  state = "ready",
-  small = false,
-}: {
-  state?: string;
-  small?: boolean;
-}) {
-  return (
-    <svg
-      className={`spark ${small ? "spark-small" : ""} spark-${state}`}
-      viewBox="0 0 160 180"
-      role="img"
-      aria-label={`Glint AI companion, ${state}`}
-    >
-      <defs>
-        <radialGradient id={small ? "glow-s" : "glow"}>
-          <stop stopColor="#67d5ff" />
-          <stop offset=".7" stopColor="#149cff" />
-          <stop offset="1" stopColor="#0866ff" />
-        </radialGradient>
-      </defs>
-      <ellipse cx="80" cy="160" rx="34" ry="6" fill="#a5c6d8" opacity=".3" />
-      <g className="spark-body">
-        <path
-          d="M78 19C90 15 94 39 107 48C117 56 142 58 148 72C155 88 138 98 125 105C115 114 117 137 104 145C93 152 83 139 76 134C67 145 52 143 48 130C44 115 37 109 22 103C7 97 7 80 22 71C42 60 54 58 61 40C65 30 67 20 78 19Z"
-          fill={`url(#${small ? "glow-s" : "glow"})`}
-        />
-        <ellipse cx="61" cy="84" rx="5" ry="8" fill="#fff" />
-        <ellipse cx="94" cy="82" rx="5" ry="8" fill="#fff" />
-        <circle cx="62" cy="81" r="1.8" fill="#fff" />
-        <circle cx="95" cy="79" r="1.8" fill="#fff" />
-        <path
-          d="M71 99Q79 107 87 98"
-          fill="none"
-          stroke="#0756a0"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-        <ellipse
-          cx="62"
-          cy="146"
-          rx="12"
-          ry="8"
-          transform="rotate(-17 62 146)"
-          fill="#55b1e9"
-        />
-        <ellipse
-          cx="92"
-          cy="146"
-          rx="12"
-          ry="8"
-          transform="rotate(17 92 146)"
-          fill="#55b1e9"
-        />
+import { useId } from "react";
+export function Spark({state="ready",small=false}:{state?:string;small?:boolean}) {
+  const id="spark-"+useId().replace(/[^a-zA-Z0-9_-]/g,"");
+  const shape="M80 15C88 15 94 38 103 46C113 55 143 58 146 69C150 81 129 91 121 102C114 111 119 137 108 142C97 148 87 132 79 132C70 132 56 148 46 141C36 134 42 114 34 103C26 92 7 83 12 71C17 59 43 57 53 47C64 36 70 15 80 15Z";
+  return <svg className={`spark ${small?"spark-small":""} spark-${state}`} viewBox="0 0 160 180" role="img" aria-label={`Glint AI companion, ${state}`}>
+    <defs>
+      <radialGradient id={id+"-base"} cx="35%" cy="23%" r="82%">
+        <stop stopColor="#51e4ff"/><stop offset=".27" stopColor="#049dff"/><stop offset=".58" stopColor="#075afa"/><stop offset=".83" stopColor="#0736d4"/><stop offset="1" stopColor="#061c79"/>
+      </radialGradient>
+      <radialGradient id={id+"-belly"} cx="68%" cy="67%" r="64%">
+        <stop stopColor="#001984" stopOpacity=".72"/><stop offset=".56" stopColor="#073fd0" stopOpacity=".25"/><stop offset="1" stopColor="#00cfff" stopOpacity="0"/>
+      </radialGradient>
+      <radialGradient id={id+"-shine"} cx="30%" cy="20%" r="65%">
+        <stop stopColor="#e5ffff" stopOpacity=".8"/><stop offset=".24" stopColor="#52edff" stopOpacity=".3"/><stop offset=".72" stopColor="#6ccfff" stopOpacity="0"/>
+      </radialGradient>
+      <linearGradient id={id+"-shoe"} x1="0" y1="0" x2=".7" y2="1">
+        <stop stopColor="#1471de"/><stop offset=".36" stopColor="#064392"/><stop offset=".7" stopColor="#031d57"/><stop offset="1" stopColor="#020c2b"/>
+      </linearGradient>
+      <filter id={id+"-round"} x="-25%" y="-25%" width="150%" height="160%" colorInterpolationFilters="sRGB">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="bump"/>
+        <feSpecularLighting in="bump" surfaceScale="9" specularConstant=".65" specularExponent="24" lightingColor="#9cf4ff" result="light"><feDistantLight azimuth="225" elevation="48"/></feSpecularLighting>
+        <feComposite in="light" in2="SourceAlpha" operator="in" result="shine"/>
+        <feBlend in="SourceGraphic" in2="shine" mode="screen"/>
+      </filter>
+      <filter id={id+"-soft"} x="-70%" y="-100%" width="240%" height="300%"><feGaussianBlur stdDeviation="3"/></filter>
+      <filter id={id+"-gloss"} x="-30%" y="-50%" width="160%" height="200%"><feGaussianBlur stdDeviation="1.5"/></filter>
+      <filter id={id+"-eyes"} x="-100%" y="-50%" width="300%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="1.4" floodColor="#80dcff" floodOpacity=".8"/></filter>
+    </defs>
+    <ellipse cx="80" cy="163" rx="33" ry="5" fill="#0739a7" opacity=".22" filter={`url(#${id}-soft)`}/>
+    <g className="spark-body">
+      <g fill={`url(#${id}-shoe)`}>
+        <path d="M51 132C44 134 42 146 46 155C48 160 57 160 63 155L71 147L65 133Z"/>
+        <path d="M97 133C104 131 111 139 114 150C115 155 111 159 104 158L89 154C85 150 87 140 97 133Z"/>
       </g>
-    </svg>
-  );
+      <path d="M48 146Q53 138 62 139M94 143Q103 138 109 149" fill="none" stroke="#38adff" strokeWidth="2" opacity=".45"/>
+      <g filter={`url(#${id}-round)`}>
+        <path d={shape} fill={`url(#${id}-base)`}/>
+        <path d={shape} fill={`url(#${id}-belly)`}/>
+        <path d={shape} fill={`url(#${id}-shine)`}/>
+      </g>
+      <path d="M76 20C69 24 65 44 56 51C45 60 24 63 18 70" fill="none" stroke="#b9ffff" strokeWidth="2.5" strokeLinecap="round" opacity=".65" filter={`url(#${id}-gloss)`}/>
+      <ellipse cx="64" cy="59" rx="17" ry="9" transform="rotate(-40 64 59)" fill="#63e9ff" opacity=".2" filter={`url(#${id}-soft)`}/>
+      <g fill="#fff" filter={`url(#${id}-eyes)`}><ellipse cx="67" cy="83" rx="3.7" ry="8"/><ellipse cx="88" cy="83" rx="3.7" ry="8"/></g>
+    </g>
+  </svg>;
 }
 export function Organizer({ assembled = false }: { assembled?: boolean }) {
   return (

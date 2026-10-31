@@ -2,11 +2,15 @@
 
 Branch: `codex/conversation-ui`, based on `task/a-realtime-asr`.
 
-Implemented UI: existing walking/shining star intro, a single Start Glint action,
+Implemented UI: direct welcome with a glossy shaded blue star, a single Start Glint action,
 companion home, independent camera/microphone controls, camera flip/fullscreen,
 conversation sheet, settings with system/light/dark appearance, captions and
 spoken replies, masked provider-key settings, optional instructions links,
 opt-in diagnostics, and an explicit session-ended state.
+
+There is no walking intro or separate home typing bar. Typed input lives inside
+Conversation. The native SVG companion uses layered shading, rim highlights,
+specular lighting, glowing eyes and shaded feet, with independent IDs per instance.
 
 Camera start and fullscreen never start the microphone. Mic off stops input;
 spoken replies have their own setting. End session stops media, aborts work and

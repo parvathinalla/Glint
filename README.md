@@ -20,7 +20,7 @@ Optional configuration is through environment variables `PORT`, `APP_ORIGIN` (mu
 
 ## Use Glint
 
-The welcome animation leads to **Start Glint**, then a blue-star companion home. There is no demo or voice-training flow.
+The site opens directly to **Start Glint**, then a glossy blue-star companion home. There is no walking intro, home typing bar, demo or voice-training flow. Typed input remains in **Conversation**.
 
 1. **Camera** starts the preview without also starting the microphone. Flip cameras, expand fullscreen, then return to the same session. Mic and camera are independently controlled.
 2. **Talk** starts hands-free voice after connecting a model. Local speech detection ends turns; live Muse transcription or bounded WAV fallback feeds Muse Spark. Kokoro has a four-second deadline with device-speech fallback. Noise and overlapping-speaker accuracy still require real-device validation; old voiceprints no longer gate turns.
