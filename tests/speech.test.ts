@@ -2,6 +2,20 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SpeechQueue } from "../src/speech-queue.ts";
 import { NaturalReplyStream, naturalReply } from "../shared/natural-reply.ts";
 afterEach(() => vi.unstubAllGlobals());
+it("reports browser playback only on utterance start, ignoring canceled callbacks", () => {
+  let utterance!: SpeechSynthesisUtterance;
+  vi.stubGlobal("window", { speechSynthesis: { speak: (value: SpeechSynthesisUtterance) => { utterance = value; }, cancel() {} } });
+  vi.stubGlobal("SpeechSynthesisUtterance", class { constructor(public text: string) {} });
+  const started = vi.fn(), queue = new SpeechQueue(() => {}, undefined, started);
+  queue.push("Hello.");
+  expect(started).not.toHaveBeenCalled();
+  const onstart = utterance.onstart!;
+  onstart.call(utterance, {} as SpeechSynthesisEvent);
+  expect(started).toHaveBeenCalledOnce();
+  queue.cancel();
+  onstart.call(utterance, {} as SpeechSynthesisEvent);
+  expect(started).toHaveBeenCalledOnce();
+});
 it("removes the obsolete duplicate lead even across token boundaries", () => {
   const cleaner = new NaturalReplyStream();
   const input =

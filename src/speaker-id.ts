@@ -3,9 +3,8 @@
  *
  * Each voice turn is embedded to a 256-dim voiceprint and compared against
  * the enrolled owner. Strangers fail CLOSED (their turns are dropped and any
- * interrupted reply resumes); everything uncertain fails OPEN (short turns,
- * load or inference failures, no enrollment) so the lock can never silence
- * the owner the way background noise once did.
+ * interrupted reply resumes). With enrollment enabled, uncertain checks
+ * pause voice replies. Without enrollment, voice input remains unrestricted.
  *
  * The frontend reproduces the Kaldi fbank the model trained on (25 ms Povey
  * window, 10 ms shift, 80 mel bins, per-utterance mean normalization):
@@ -18,12 +17,12 @@ export const SPEAKER_EMBED_DIM = 256;
 /**
  * Reject threshold from real-model validation (resnet34-LM + CMN):
  * owner clean ~0.67, owner at 10 dB white noise 0.38, strangers <= 0.25.
- * Scores below reject; everything else is allowed (fail-open).
+ * This threshold is not a guarantee for mixed or overlapping voices.
  */
 export const SPEAKER_REJECT_THRESHOLD = 0.32;
 /**
  * Turns with less voiced audio than this skip verification (backchannels
- * always pass). Voiced milliseconds, not WAV seconds: turn audio carries
+ * are unverified). Voiced milliseconds, not WAV seconds: turn audio carries
  * pre-roll and end silence, so WAV duration always clears this floor.
  */
 export const SPEAKER_MIN_SECONDS = 0.8;
@@ -207,7 +206,7 @@ export function averageVoiceprint(samples: Float32Array[]): Float32Array {
 }
 export type SpeakerVerdict = "owner" | "stranger";
 export function verifyScore(score: number): SpeakerVerdict {
-  return score < SPEAKER_REJECT_THRESHOLD ? "stranger" : "owner";
+  return !Number.isFinite(score) || score < SPEAKER_REJECT_THRESHOLD ? "stranger" : "owner";
 }
 export type Voiceprint = {
   version: number;
@@ -313,7 +312,7 @@ export type EmbedSession = {
 /**
  * Load the real ONNX Runtime session. Imported lazily so the runtime and the
  * 25 MB model stay out of the main bundle; throws on any failure (the caller
- * fails open to answering everyone).
+ * treats the check as unverified).
  */
 export async function loadSpeakerSession(): Promise<EmbedSession> {
   const ort = await import("onnxruntime-web");
@@ -355,7 +354,7 @@ function testEmbedOverride(): EmbedOverride | null {
 /**
  * One embedder per voice session. Loads the model lazily on first use,
  * serializes runs (low-end phones), and reports failures once so the UI can
- * say the lock is off instead of silently answering strangers.
+ * explain that voice verification is unavailable.
  */
 export class SpeakerEmbedder {
   private session: EmbedSession | null = null;

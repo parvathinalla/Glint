@@ -25,7 +25,7 @@ export type VoicePlaybackState = {
   lastSeq: number;
   fallback: number;
 };
-type Queued = { buffer: AudioBuffer; text: string; seq: number };
+type Queued = { buffer: AudioBuffer; text: string; seq: number } | { text: string; device: true };
 /**
  * Plays the server's neural voice gaplessly and falls back to device
  * speech per sentence when synthesis or decoding fails. Mirrors the
@@ -47,11 +47,13 @@ export class VoicePlayer {
   constructor(
     private changed: (speaking: boolean) => void,
     private onSpeak?: (text: string) => void,
+    private onPlayback?: (state: "audio-scheduled" | "device-playback-start" | "playback-blocked") => void,
   ) {
     this.robot = new SpeechQueue((speaking) => {
       this.robotSpeaking = speaking;
+      if (!speaking) this.pump();
       this.report();
-    }, onSpeak);
+    }, onSpeak, () => this.onPlayback?.("device-playback-start"));
   }
   /**
    * Create and resume the audio context from inside a user-gesture
@@ -93,8 +95,8 @@ export class VoicePlayer {
   /** Speak one failed sentence on the device voice, in stream order. */
   audioError(text: string) {
     this.fallbackCount++;
-    this.robot.push(text);
-    this.robot.finish();
+    this.queue.push({ text, device: true });
+    this.pump();
   }
   /** No more audio is coming; drain the queue, then report idle. */
   finish() {
@@ -126,6 +128,7 @@ export class VoicePlayer {
     this.active = false;
     this.paused = this.queue.length > 0;
     this.robot.softStop();
+    this.robotSpeaking = false;
   }
   /** Resume a softStop() when the interruption proved to be echo. */
   resume() {
@@ -174,8 +177,14 @@ export class VoicePlayer {
     }
   }
   private pump() {
-    if (this.active || this.paused || !this.queue.length || !this.ctx) return;
+    if (this.active || this.robotSpeaking || this.paused || !this.queue.length) return;
     const next = this.queue.shift()!;
+    if ("device" in next) {
+      this.robot.push(next.text);
+      this.robot.finish();
+      return;
+    }
+    if (!this.ctx) return;
     const version = this.generation;
     const source = this.ctx.createBufferSource();
     source.buffer = next.buffer;
@@ -197,6 +206,7 @@ export class VoicePlayer {
       }),
     );
     source.start();
+    this.onPlayback?.(this.ctx.state === "running" ? "audio-scheduled" : "playback-blocked");
   }
   private report() {
     const speaking =

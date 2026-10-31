@@ -158,6 +158,11 @@ export function useCamera(onProblem: (s: string) => void) {
     facing.current = facing.current === "environment" ? "user" : "environment";
     return start();
   }, [start]);
+  const recordClip = useCallback((signal: AbortSignal) => {
+    const epoch=generation.current;
+    if(!video.current || !stream.current)throw Error("Open the camera before tracking.");
+    return recordTrackingClip(video.current,signal,()=>generation.current===epoch);
+  },[]);
   const recent = useCallback(() => {
     const selected: Frame[] = [];
     for (const frame of [...ring.current].reverse()) {
@@ -169,7 +174,50 @@ export function useCamera(onProblem: (s: string) => void) {
     return selected.reverse();
   }, []);
   useEffect(() => () => stop(), [stop]);
-  return { video, active, starting, start, stop, sample, recent, hint, buffer, flip, facingMode };
+  return { video, active, starting, start, stop, sample, recent, hint, buffer, flip, facingMode, recordClip };
+}
+/** A bounded, explicitly requested future clip, not continuous recording. */
+export function recordTrackingClip(video: HTMLVideoElement,signal:AbortSignal,isCurrent=()=>true):Promise<{clip:string;from:number;to:number}> {
+  if(typeof MediaRecorder==="undefined")return Promise.reject(Error("This browser cannot record a tracking clip."));
+  const mime=["video/mp4;codecs=avc1.42E01E","video/mp4"].find(type=>MediaRecorder.isTypeSupported(type));
+  if(!mime)return Promise.reject(Error("This browser cannot record the MP4 format required by SAM. Try another supported phone/browser."));
+  if(!video.videoWidth || !video.videoHeight)return Promise.reject(Error("Wait for the camera preview before tracking."));
+  const canvas=document.createElement("canvas"),scale=384/Math.max(video.videoWidth,video.videoHeight);
+  canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
+  const ctx=canvas.getContext("2d");
+  if(!ctx)return Promise.reject(Error("Camera recording is unavailable."));
+  const capture=canvas.captureStream(12);
+  return new Promise((resolve,reject)=>{
+    let recorder: MediaRecorder;
+    try {recorder=new MediaRecorder(capture,{mimeType:mime,videoBitsPerSecond:300000});}
+    catch {capture.getTracks().forEach(t=>t.stop());reject(Error("MP4 recording could not start."));return;}
+    const chunks:Blob[]=[],from=Date.now();let bytes=0,settled=false;
+    const cleanup=()=>{clearInterval(draw);clearTimeout(end);signal.removeEventListener("abort",abort);capture.getTracks().forEach(t=>t.stop());};
+    const fail=(message:string)=>{if(settled)return;settled=true;cleanup();if(recorder.state!=="inactive")recorder.stop();reject(Error(message));};
+    const abort=()=>fail("Tracking canceled.");
+    const draw=setInterval(()=>{
+      if(!isCurrent())return fail("Camera changed. Record a new tracking clip.");
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    },1000/12);
+    const end=setTimeout(()=>{if(recorder.state!=="inactive")recorder.stop();},2000);
+    recorder.ondataavailable=event=>{
+      if(settled)return;
+      bytes+=event.data.size;
+      if(bytes>600000)return fail("Tracking clip is too large. Try a steadier view.");
+      chunks.push(event.data);
+    };
+    recorder.onerror=()=>fail("Camera clip recording failed.");
+    recorder.onstop=()=>{
+      if(settled)return;settled=true;cleanup();
+      const to=Date.now();
+      if(signal.aborted || !isCurrent()){reject(Error("Tracking canceled."));return;}
+      void asDataUrl(new Blob(chunks,{type:"video/mp4"})).then(clip=>resolve({clip,from,to}),reject);
+    };
+    signal.addEventListener("abort",abort,{once:true});
+    if(signal.aborted){abort();return;}
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    try {recorder.start(200);} catch {fail("MP4 recording could not start.");}
+  });
 }
 export async function encodeCameraFrames(
   frames: Frame[],

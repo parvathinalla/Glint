@@ -7,6 +7,8 @@ import { Problem } from "./provider.ts";
 import { agentInput, observeInput } from "../shared/agent.ts";
 import { TtsStream } from "./tts-stream.ts";
 import { getServerVoice } from "./tts-kokoro.ts";
+import { trackInput } from "../shared/object-motion.ts";
+import { voiceDiagnosticBatch } from "../shared/voice-diagnostics.ts";
 
 export const cookieToken = (header = "") =>
   header
@@ -301,6 +303,29 @@ export function createApp(engine: Engine, origin: string, production = false) {
     next();
   });
   const s = (res: express.Response) => res.locals.session as Session;
+  const diagnosticRates = new WeakMap<Session, { started: number; count: number }>();
+  app.post("/api/voice-diagnostics", (req, res) => {
+    const batch = voiceDiagnosticBatch.parse(req.body);
+    const session = s(res), now = Date.now();
+    let rate = diagnosticRates.get(session);
+    if (!rate || now - rate.started >= 60000) {
+      rate = { started: now, count: 0 };
+      diagnosticRates.set(session, rate);
+    }
+    if (rate.count + batch.events.length > 360)
+      throw new Problem(429, "DIAGNOSTIC_LIMIT", "Diagnostic event limit reached.");
+    rate.count += batch.events.length;
+    for (const event of batch.events)
+      console.info(`[glint-client-voice] ${JSON.stringify(event)}`);
+    res.json({ accepted: batch.events.length });
+  });
+  app.post("/api/track", async(req,res)=>{
+    const input=trackInput.parse(req.body),session=s(res);
+    res.on("close",()=>{
+      if(!res.writableEnded && session.epoch===input.epoch)engine.phase(session,"paused");
+    });
+    res.json(await engine.trackMotion(session,input));
+  });
   app.post("/api/observe", async (req, res) => {
     const input = observeInput.parse(req.body);
     input.frames.forEach((frame) => validateCameraImage(frame.image, 90000));
@@ -390,9 +415,9 @@ export function createApp(engine: Engine, origin: string, production = false) {
               voice,
               (event) => emit(event),
               {
-                onTiming: (ms, chars) =>
+                onTiming: (ms, chars, timing) =>
                   console.info(
-                    `[glint-timing] ${JSON.stringify({ scope: "server", lane: "tts", ms, chars })}`,
+                    `[glint-timing] ${JSON.stringify({ scope: "server", lane: "tts", ms, chars, ...timing })}`,
                   ),
               },
             );

@@ -81,6 +81,21 @@ function stage() {
 }
 afterEach(() => vi.unstubAllGlobals());
 
+it("plays neural audio and device fallback in one queue without overlap", () => {
+  const { player, sources, utterances, said } = stage();
+  player.unlock();
+  player.playAudio({ seq: 0, text: "First.", pcm: pcmBase64(240), sampleRate: 24000 });
+  player.audioError("Second.");
+  player.playAudio({ seq: 2, text: "Third.", pcm: pcmBase64(240), sampleRate: 24000 });
+  expect(utterances).toHaveLength(0);
+  sources[0].onended!();
+  expect(utterances.map(x => x.text)).toEqual(["Second."]);
+  expect(sources).toHaveLength(1);
+  utterances[0].onend();
+  expect(sources).toHaveLength(2);
+  expect(said).toEqual(["First.", "Second.", "Third."]);
+});
+
 it("plays sentences in order and reports speaking transitions", () => {
   const { player, sources, changed, said } = stage();
   player.unlock();

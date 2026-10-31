@@ -33,6 +33,7 @@ type SherpaTts = {
   generateAsync(request: {
     text: string;
     generationConfig: unknown;
+    onProgress?: (info: { samples: Float32Array; progress: number }) => number;
   }): Promise<{ samples: ArrayLike<number>; sampleRate: number }>;
 };
 /** Kokoro int8 through the sherpa native binding; non-blocking synth. */
@@ -65,15 +66,20 @@ export class SherpaKokoroVoice implements GlintVoice {
     });
     return { tts, config: sherpa };
   }
-  async synth(text: string): Promise<VoiceSample> {
+  async synth(text: string, signal?: AbortSignal): Promise<VoiceSample> {
     const { tts, config } = await this.ready;
+    signal?.throwIfAborted();
     const audio = await tts.generateAsync({
       text,
+      // Native synthesis checks this between generated chunks. The caller's
+      // deadline handles engines that cannot stop inside a single chunk.
+      onProgress: () => signal?.aborted ? 0 : 1,
       generationConfig: new config.GenerationConfig({
         sid: this.sid,
         speed: 1.0,
       }),
     });
+    signal?.throwIfAborted();
     return {
       samples: Float32Array.from(audio.samples),
       sampleRate: audio.sampleRate,

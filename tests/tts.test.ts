@@ -1,9 +1,57 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   serializeVoice,
   type GlintVoice,
   type VoiceSample,
 } from "../server/tts.ts";
+
+it("times out a stuck native job, bypasses it during cooldown, and never overlaps jobs", async () => {
+  vi.useFakeTimers();
+  try {
+    let release!: () => void;
+    let calls = 0;
+    let nativeSignal: AbortSignal | undefined;
+    const voice = serializeVoice({ name: "slow", sampleRate: 24000, async synth(_text, signal) {
+      calls++;
+      nativeSignal = signal;
+      if (calls === 1) await new Promise<void>(resolve => { release = resolve; });
+      return { samples: new Float32Array(10), sampleRate: 24000 };
+    } }, { timeoutMs: 4000, cooldownMs: 60000 });
+    const first = voice.synth("Slow sentence.");
+    const failure = expect(first).rejects.toThrow("deadline");
+    await vi.advanceTimersByTimeAsync(4000);
+    await failure;
+    expect(nativeSignal?.aborted).toBe(true);
+    await expect(voice.synth("New reply.")).rejects.toThrow("cooling down");
+    expect(calls).toBe(1);
+    release();
+    await vi.advanceTimersByTimeAsync(60000);
+    const recovered = await voice.synth("Recovered.");
+    expect(calls).toBe(2);
+    expect(recovered.timing).toMatchObject({ queueMs: expect.any(Number), generationMs: expect.any(Number) });
+  } finally { vi.useRealTimers(); }
+});
+
+it("rejects canceled callers immediately without releasing an unfinished native lane", async () => {
+  let release!: () => void;
+  const calls: string[] = [];
+  const voice = serializeVoice({ name: "test", sampleRate: 24000, async synth(text) {
+    calls.push(text);
+    if (text === "old") await new Promise<void>(resolve => { release = resolve; });
+    return { samples: new Float32Array(1), sampleRate: 24000 };
+  } });
+  const controller = new AbortController();
+  const old = voice.synth("old", controller.signal);
+  await Promise.resolve();
+  controller.abort();
+  await expect(old).rejects.toThrow();
+  const next = voice.synth("next");
+  await Promise.resolve();
+  expect(calls).toEqual(["old"]);
+  release();
+  await next;
+  expect(calls).toEqual(["old", "next"]);
+});
 
 it("skips canceled synthesis waiting behind an active sentence", async () => {
   let release!: () => void;

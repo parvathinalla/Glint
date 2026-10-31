@@ -13,6 +13,7 @@ Source review: 31 October 2026. This documents the local implementation, rather 
 | Companion UI and intro | React 19, TypeScript, CSS, original SVG, browser animation frames; Lucide icons | `src/App.tsx`, `src/CompanionHome.tsx`, `src/Opening.tsx`, `src/OpeningCharacter.tsx` |
 | Camera preview and recent visual evidence | getUserMedia, Canvas JPEG encoding, bounded ring buffer, quality Web Worker | `src/camera.ts`, `src/quality.worker.ts`, `shared/buffer.ts` |
 | Local person / hand-rise events | MediaPipe Pose Landmarker in a Web Worker | `src/visual-awareness.ts`, `public/vision-observer.js`, `shared/visual-events.ts` |
+| Optional recorded object movement | SAM 3.1, official Meta SAM parser, normalized per-frame box centers; experimental two-second clips | `server/sam-provider.ts`, `shared/object-motion.ts`, `docs/OBJECT_TRACKING.md` |
 | Speech capture and turn detection | Web Audio, AudioWorklet, Silero VAD using ONNX Runtime Web/WASM, energy detection | `src/microphone.ts`, `src/ml-vad.ts`, `public/voice-capture.js`, `shared/voice-turn.ts` |
 | Optional speaker check | WeSpeaker ResNet34-LM, ONNX Runtime Web/WASM, locally enrolled voiceprint | `src/speaker-id.ts` |
 | Streaming speech recognition | Browser WebSocket to local server; server `ws` adapter to Meta Muse Voice Transcribe `/asr/realtime` | `src/voice-stream.ts`, `server/asr-provider.ts`, `server/app.ts` |
@@ -44,6 +45,6 @@ Raw provider keys live in server memory only, with fifteen-minute idle and two-h
 
 The current engine constant is **100 provider dispatches per session**, not the older README's 40. This is an application allowance, not a monetary spending cap. Sessions are local cookie sessions, not managed account authentication. The server binds to loopback; public deployment remains gated.
 
-Managed auth, PostgreSQL, object storage, SAM tracking, LiveKit, Docling, Rive and GPU hosting appear as proposals or candidates in plans; they are not active integrations in this implementation. `three` appears in package dependencies, but no source import was found, so it is not shown as the active rendering engine.
+Managed auth, PostgreSQL, object storage, continuous tracking, LiveKit, Docling, Rive and GPU hosting remain proposals or candidates. An experimental user-triggered SAM recorded-clip path is now implemented; it is not a persistent cross-clip tracker. `three` appears in package dependencies, but no source import was found, so it is not shown as the active rendering engine. The earlier architecture illustrations predate this optional SAM action; see `OBJECT_TRACKING.md` for its boundaries.
 
 This review and diagram do not establish live provider accuracy, latency or production readiness. No credentials or paid provider calls were used, and application tests were not rerun for this documentation-only change. The generated PNG was rendered and visually inspected.

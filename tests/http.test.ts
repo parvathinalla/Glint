@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -60,6 +60,35 @@ afterEach(async () => {
   }
 });
 describe("HTTP isolation and validation", () => {
+  it("authenticates content-free voice diagnostics without charging provider allowance", async () => {
+    const f = await fixture();
+    const batch = { events: [{ turn: 1, stage: "speech-start", elapsedMs: 0 }] };
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect((await f.call("voice-diagnostics", batch, { cookie: "glint_session=missing" })).status).toBe(401);
+      expect((await f.call("voice-diagnostics", batch, { csrf: "wrong" })).status).toBe(403);
+      const accepted = await f.call("voice-diagnostics", batch);
+      expect(accepted.status).toBe(200);
+      expect(await accepted.json()).toEqual({ accepted: 1 });
+      expect(info).toHaveBeenCalledWith('[glint-client-voice] {"turn":1,"stage":"speech-start","elapsedMs":0}');
+      info.mockClear();
+      expect((await f.call("voice-diagnostics", { events: [{ ...batch.events[0], transcript: "private" }] })).status).toBe(400);
+      expect(info).not.toHaveBeenCalled();
+      const updated = await (await fetch(f.base + "/api/session", { headers: { Cookie: f.cookie } })).json();
+      expect(updated.calls).toBe(f.view.calls);
+    } finally { info.mockRestore(); }
+  });
+  it("bounds diagnostic batch size and rate per session", async () => {
+    const f = await fixture();
+    const event = { turn: 1, stage: "speech-start", elapsedMs: 0 };
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect((await f.call("voice-diagnostics", { events: Array(31).fill(event) })).status).toBe(400);
+      for (let i = 0; i < 12; i++)
+        expect((await f.call("voice-diagnostics", { events: Array(30).fill(event) })).status).toBe(200);
+      expect((await f.call("voice-diagnostics", { events: [event] })).status).toBe(429);
+    } finally { info.mockRestore(); }
+  });
   it("validates automatic camera sequences before dispatch and requires the private session", async () => {
     const f = await fixture();
     const now = Date.now();

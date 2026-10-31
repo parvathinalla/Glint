@@ -11,6 +11,8 @@ import { Problem, type Provider } from "./provider.ts";
 import { VoiceStream, type AsrSocketFactory } from "./asr-provider.ts";
 import { Store } from "./store.ts";
 import { AgentProvider } from "./agent-provider.ts";
+import { SamProvider, validateTrackingClip } from "./sam-provider.ts";
+import type { ObjectMotion, TrackInput } from "../shared/object-motion.ts";
 import type {
   AgentInput,
   Turn,
@@ -43,6 +45,7 @@ export type Session = {
   agentSource?: Turn;
   visual?: VisualObservation;
   voice?: VoiceStream;
+  motion?: ObjectMotion;
 };
 export const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const HOUR = 3600000;
@@ -71,6 +74,7 @@ export class Engine {
     private now = Date.now,
     private agent = new AgentProvider(),
     private voiceOptions: VoiceOptions = {},
+    private sam = new SamProvider(),
   ) {}
   session(token?: string): { session: Session; token?: string } {
     const valid = token && /^[a-f0-9]{64}$/.test(token);
@@ -146,6 +150,7 @@ export class Engine {
     }
   }
   cancel(s: Session) {
+    delete s.motion;
     s.voice?.close();
     delete s.voice;
     s.controller?.abort();
@@ -311,7 +316,7 @@ export class Engine {
     s: Session,
     epoch: number,
     requestId: string,
-    lane: "converse" | "observe" | "transcribe",
+    lane: "converse" | "observe" | "transcribe" | "track",
     work: (key: string, signal: AbortSignal) => Promise<T>,
   ) {
     this.expireKey(s);
@@ -404,6 +409,12 @@ export class Engine {
             },
           ]
         : [];
+    if(s.motion && s.motion.epoch===s.epoch && this.now()-s.motion.to<15000)
+      recent.push({role:"user",content:JSON.stringify({recordedObjectMotion:{
+        concept:s.motion.concept,direction:s.motion.direction,reason:s.motion.reason,
+        reference:s.motion.reference,from:s.motion.from,to:s.motion.to,
+        instruction:"Recorded clip evidence only. Do not claim current or desk-relative motion; camera movement may affect it.",
+      }})});
     if (input.events?.length)
       recent.push({
         role: "user",
@@ -549,7 +560,15 @@ export class Engine {
   clearVision(s: Session) {
     this.cancel(s);
     delete s.visual;
+    delete s.motion;
     return this.view(s);
+  }
+  async trackMotion(s: Session,input: TrackInput) {
+    validateTrackingClip(input,this.now());
+    const result=await this.agentCall(s,input.epoch,input.requestId,"track",(key,signal)=>this.sam.track(key,input,signal));
+    const motion: ObjectMotion={...result,concept:input.concept,from:input.from,to:input.to,epoch:s.epoch};
+    s.motion=motion;
+    return motion;
   }
   async transcribe(
     s: Session,

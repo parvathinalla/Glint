@@ -15,7 +15,7 @@ export type TtsEvent =
 /**
  * Synths reply sentences in order while the LLM stream is still coming
  * in. Sentences queue FIFO; finish() drains the tail before resolving,
- * and cancel() drops everything queued or in flight.
+ * and cancel() drops queued work and suppresses late in-flight audio.
  */
 export class TtsStream {
   private sentences = new SentenceStream();
@@ -24,10 +24,11 @@ export class TtsStream {
   private cancelled = false;
   private controller = new AbortController();
   private announced = false;
+  private deviceOnly = false;
   constructor(
     private voice: GlintVoice,
     private emit: (event: TtsEvent) => void,
-    private options: { onTiming?: (ms: number, chars: number) => void } = {},
+    private options: { onTiming?: (ms: number, chars: number, timing?: { queueMs: number; generationMs: number }) => void } = {},
   ) {}
   announce() {
     if (this.announced) return;
@@ -61,7 +62,8 @@ export class TtsStream {
       if (this.cancelled) return;
       // The installed Kokoro voice uses an English lexicon. Do not spend
       // CPU silently skipping Telugu words; let the device voice try them.
-      if (this.voice.name === "kokoro-af-heart" && /[\u0C00-\u0C7F]/u.test(text)) {
+      if (this.deviceOnly || (this.voice.name === "kokoro-af-heart" && /[\u0C00-\u0C7F]/u.test(text))) {
+        this.deviceOnly = true;
         this.emit({ type: "audio-error", seq, text });
         return;
       }
@@ -71,6 +73,7 @@ export class TtsStream {
         this.options.onTiming?.(
           Math.round(performance.now() - started),
           text.length,
+          audio.timing,
         );
         if (this.cancelled) return;
         this.emit({
@@ -82,6 +85,7 @@ export class TtsStream {
         });
       } catch {
         if (this.cancelled) return;
+        this.deviceOnly = true;
         this.emit({ type: "audio-error", seq, text });
       }
     });

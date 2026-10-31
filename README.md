@@ -31,6 +31,8 @@ The home screen starts with the blue star companion, conversation and camera con
 
 The optional **illustrated example** preserves source review, no-key replay, dependency-aware user-reported progress and the previous checkpoint controls. It is demo content, not a manufacturer manual or live assessment.
 
+Optional **Track object movement (SAM)** in the camera view records the next two seconds when clicked, submits a bounded MP4 clip to `sam-3.1`, and reports movement relative to the camera. Hold the phone still, name one object such as **computer mouse**, click the button, then move it while recording. SAM access is separate from Spark model-list access; video has a 50-frame billing minimum per request. This is experimental recorded-clip analysis, not continuous tracking. See [object tracking](docs/OBJECT_TRACKING.md) for format requirements, limits and verification.
+
 Provider adapters and voice/link flows have fixture tests, not live provider verification. No real credentials or paid API calls were used during implementation.
 
 ## Privacy and key lifecycle
@@ -69,3 +71,9 @@ Unit/integration tests use fake provider responses. Browser tests use Chromium's
 - `docs/`: standalone design/architecture/plan, provider references, implementation status, and tests.
 
 The standalone design documents and original Glint concept assets are in `docs/`.
+
+# Voice quality testing
+
+Optional **Voice test diagnostics** records only event names and timings, with
+no speech text or media. See [the evaluation guide](docs/VOICE_QUALITY_EVAL.md)
+for the test matrix, playback evidence limits and content-free scoring command.

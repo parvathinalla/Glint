@@ -81,7 +81,7 @@ it("cleans markdown before synthesis and skips empties without a seq", async () 
   ).toEqual([0, 1]);
 });
 
-it("emits audio-error with text on failure and continues the reply", async () => {
+it("uses device speech for the rest of a reply after synthesis fails", async () => {
   const events: TtsEvent[] = [];
   let calls = 0;
   const stream = new TtsStream(
@@ -93,7 +93,7 @@ it("emits audio-error with text on failure and continues the reply", async () =>
   expect(events.map((event) => event.type)).toEqual([
     "audio",
     "audio-error",
-    "audio",
+    "audio-error",
   ]);
   expect(events[1]).toMatchObject({ type: "audio-error", seq: 1 });
   expect((events[2] as { text: string }).text).toBe("Third.");

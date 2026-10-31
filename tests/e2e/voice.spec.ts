@@ -1,6 +1,98 @@
 import { test, expect, type Page } from "./fixture";
 test.use({ reducedMotion: "reduce" });
 
+test("voice diagnostics require opt-in and share no transcript content", async ({ page, context }) => {
+  await context.grantPermissions(["microphone"]);
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-ml-vad", "0");
+    localStorage.setItem("glint-streaming-voice", "0");
+    localStorage.setItem("glint-neural-voice", "0");
+  });
+  await connectedSession(page);
+  const batches: unknown[] = [];
+  await page.route("**/api/voice-diagnostics", async route => {
+    batches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { accepted: route.request().postDataJSON().events.length } });
+  });
+  await page.route("**/api/voice", async route => {
+    await route.fulfill({ json: { transcript: "Private fixture question.", epoch: route.request().postDataJSON().epoch } });
+  });
+  await page.route("**/api/agent/stream", async route => {
+    await route.fulfill({ json: { message: "Fixture answer.", sources: [], searched: false, epoch: route.request().postDataJSON().epoch } });
+  });
+  await startVoice(page);
+  await page.waitForTimeout(600);
+  await say(page);
+  await expect(page.getByText("Fixture answer.", { exact: true })).toBeVisible();
+  expect(batches).toEqual([]);
+  await page.getByText("Voice test diagnostics", { exact: true }).click();
+  await page.getByRole("checkbox", { name: "Record and share voice diagnostics" }).check();
+  await page.waitForTimeout(600);
+  await say(page);
+  await expect.poll(() => batches.length, { timeout: 10000 }).toBeGreaterThan(0);
+  expect(JSON.stringify(batches)).toContain("reply-dispatched");
+  expect(JSON.stringify(batches)).not.toContain("Private fixture question");
+  expect(JSON.stringify(batches)).not.toContain("Fixture answer");
+  await expect(page.getByText("Shared with this test server.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download voice diagnostics" })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Record and share voice diagnostics" }).uncheck();
+});
+
+for (const verdict of ["owner", "stranger", "unknown"] as const) {
+  test(`voice lock waits before dispatch and handles ${verdict}`, async ({ page, context }) => {
+    await context.grantPermissions(["microphone"]);
+    await syntheticMicrophone(page);
+    await page.addInitScript(() => {
+      localStorage.setItem("glint-ml-vad", "0");
+      localStorage.setItem("glint-streaming-voice", "0");
+      const vector = Array.from({ length: 256 }, (_, i) => i === 0 ? 1 : 0);
+      localStorage.setItem("glint-speaker-voiceprint", JSON.stringify({
+        version: 1, model: "wespeaker-resnet34-LM", dim: 256, vector, samples: 2, enrolledAt: Date.now(),
+      }));
+      const fixture = window as unknown as {
+        speakerStarted: boolean;
+        releaseSpeaker: (verdict: string) => void;
+        __glintSpeaker: { embed: () => Promise<Float32Array> };
+      };
+      fixture.__glintSpeaker = { embed: () => new Promise((resolve, reject) => {
+        fixture.speakerStarted = true;
+        fixture.releaseSpeaker = verdict => {
+          if (verdict === "unknown") reject(Error("fixture inference failure"));
+          else resolve(Float32Array.from(verdict === "owner" ? vector : vector.map((_, i) => i === 1 ? 1 : 0)));
+        };
+      }) };
+    });
+    await connectedSession(page);
+    let transcriptions = 0, replies = 0;
+    await page.route("**/api/voice", async route => {
+      transcriptions++;
+      await route.fulfill({ json: { transcript: "My own question.", epoch: route.request().postDataJSON().epoch } });
+    });
+    await page.route("**/api/agent/stream", async route => {
+      replies++;
+      await route.fulfill({ json: { message: "Verified reply.", sources: [], searched: false, epoch: route.request().postDataJSON().epoch } });
+    });
+    await startVoice(page);
+    await page.waitForTimeout(600);
+    await page.evaluate(() => (window as unknown as { voiceFixture: { say: (seconds: number) => void } }).voiceFixture.say(1.3));
+    await expect.poll(() => page.evaluate(() => (window as unknown as { speakerStarted: boolean }).speakerStarted)).toBe(true);
+    await expect(page.getByText("Checking your voice…", { exact: true })).toBeVisible();
+    expect(transcriptions).toBe(0);
+    expect(replies).toBe(0);
+    await page.evaluate(v => (window as unknown as { releaseSpeaker: (v: string) => void }).releaseSpeaker(v), verdict);
+    if (verdict === "owner") {
+      await expect(page.getByText("Verified reply.", { exact: true })).toBeVisible();
+      expect(transcriptions).toBe(1);
+      expect(replies).toBe(1);
+    } else {
+      await expect(page.getByText(verdict === "stranger" ? "Ignored — that voice didn't match yours." : /Could not confirm your voice/)).toBeVisible();
+      expect(transcriptions).toBe(0);
+      expect(replies).toBe(0);
+    }
+  });
+}
+
 /** 24 kHz mono 16-bit sine for mocked neural audio (0.5 amplitude). */
 function pcm(seconds: number): string {
   const rate = 24000,

@@ -37,6 +37,7 @@ export class SpeechQueue {
   constructor(
     private changed: (speaking: boolean) => void,
     private onSpeak?: (phrase: string) => void,
+    private onPlayback?: () => void,
   ) {}
   /**
    * Unlock platform speech from inside a user-gesture handler (required on
@@ -134,6 +135,9 @@ export class SpeechQueue {
     if (telugu) utterance.lang = "te-IN";
     if (voice) utterance.voice = voice;
     this.active = true;
+    utterance.onstart = () => {
+      if (version === this.generation) this.onPlayback?.();
+    };
     this.changed(true);
     utterance.onend = () => {
       if (version !== this.generation) return;
