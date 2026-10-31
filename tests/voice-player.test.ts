@@ -179,6 +179,15 @@ it("resumes a suspended context when audio arrives", () => {
   expect(contexts[0].resumed).toBe(resumed + 1);
 });
 
+it("a gesture also resumes an interrupted mobile audio context", () => {
+  const { player, contexts } = stage();
+  player.unlock();
+  contexts[0].state = "interrupted";
+  const resumed = contexts[0].resumed;
+  player.unlock();
+  expect(contexts[0].resumed).toBe(resumed + 1);
+});
+
 it("reports playback state for the on-screen voice note", () => {
   const { player } = stage();
   expect(player.getState()).toMatchObject({ ctx: "missing" });

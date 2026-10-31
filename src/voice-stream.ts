@@ -110,7 +110,10 @@ export class VoiceClient {
   private queue: (string | Uint8Array)[] = [];
   private ready = false;
   private dead = false;
+  private reconnect = false;
   private streamOpen = false;
+  private opening = false;
+  private pendingEnd = false;
   private preOpen: Uint8Array[] = [];
   private preOpenBytes = 0;
   constructor(
@@ -124,34 +127,52 @@ export class VoiceClient {
     const socket = this.socketFactory(this.url);
     this.socket = socket;
     socket.onOpen(() => {
-      if (this.dead) return;
+      if (this.dead || this.socket !== socket) return;
       this.ready = true;
       for (const item of this.queue) socket.send(item);
       this.queue = [];
     });
     socket.onMessage((data) => {
-      if (!this.dead) this.onFrame(data);
+      if (!this.dead && this.socket === socket) this.onFrame(data);
     });
     socket.onClose((code) => {
-      if (this.dead) return;
-      this.dead = true;
+      if (this.dead || this.socket !== socket) return;
+      this.socket = null;
+      this.ready = false;
+      this.reconnect = true;
+      this.streamOpen = false;
+      this.opening = false;
+      this.pendingEnd = false;
+      this.preOpen = [];
+      this.preOpenBytes = 0;
       this.queue = [];
       this.events.onClosed({ code, retryable: false });
     });
   }
   open(epoch: number, requestId: string = crypto.randomUUID()) {
+    if (this.reconnect && !this.dead) {
+      this.reconnect = false;
+      this.connect();
+    }
     this.streamOpen = false;
+    this.opening = true;
+    this.pendingEnd = false;
     this.preOpen = [];
     this.preOpenBytes = 0;
     this.send(JSON.stringify({ type: "open", epoch, requestId }));
   }
   audio(pcm: Uint8Array) {
+    if (!this.streamOpen && !this.opening) return;
     if (!this.streamOpen) {
-      while (
-        this.preOpen.length &&
-        this.preOpenBytes + pcm.length > MAX_PREOPEN_BYTES
-      )
-        this.preOpenBytes -= this.preOpen.shift()!.length;
+      // Do not silently discard the beginning of an utterance. The caller
+      // still has the complete WAV and can transcribe that instead.
+      if (this.preOpenBytes + pcm.byteLength > MAX_PREOPEN_BYTES) {
+        this.preOpen = [];
+        this.preOpenBytes = 0;
+        this.opening = false;
+        this.events.onGap();
+        return;
+      }
       this.preOpen.push(pcm);
       this.preOpenBytes += pcm.length;
       return;
@@ -159,12 +180,19 @@ export class VoiceClient {
     this.send(pcm);
   }
   end() {
+    if (this.opening && !this.streamOpen) {
+      this.pendingEnd = true;
+      return;
+    }
+    if (!this.streamOpen) return;
     this.send(JSON.stringify({ type: "end" }));
     this.streamOpen = false;
     this.preOpen = [];
     this.preOpenBytes = 0;
   }
   closeStream() {
+    this.opening = false;
+    this.pendingEnd = false;
     this.send(JSON.stringify({ type: "close" }));
     this.streamOpen = false;
     this.preOpen = [];
@@ -203,11 +231,17 @@ export class VoiceClient {
       transcript = record.transcript;
     switch (record.type) {
       case "opened": {
+        if (!this.opening) return;
+        this.opening = false;
         this.streamOpen = true;
         const held = this.preOpen;
         this.preOpen = [];
         this.preOpenBytes = 0;
         for (const pcm of held) this.send(pcm);
+        if (this.pendingEnd) {
+          this.pendingEnd = false;
+          this.end();
+        }
         this.events.onOpened();
         return;
       }
@@ -235,6 +269,11 @@ export class VoiceClient {
         this.events.onGap();
         return;
       case "closed": {
+        this.streamOpen = false;
+        this.opening = false;
+        this.pendingEnd = false;
+        this.preOpen = [];
+        this.preOpenBytes = 0;
         const code = record.code,
           retryable = record.retryable,
           reason = record.reason;
@@ -252,6 +291,13 @@ export class VoiceClient {
         const code = record.code,
           message = record.message;
         if (typeof code === "string" && typeof message === "string") {
+          if (code !== "ASR_ERROR") {
+            this.streamOpen = false;
+            this.opening = false;
+            this.pendingEnd = false;
+            this.preOpen = [];
+            this.preOpenBytes = 0;
+          }
           this.events.onError(code, message);
           return;
         }

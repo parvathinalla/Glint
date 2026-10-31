@@ -125,7 +125,13 @@ export class SentenceStream {
         break;
       }
     }
-    if (end < 0) return done;
+    if (end < 0) {
+      if (this.buffer.length <= MAX_SENTENCE) return done;
+      const cut = findCut(this.buffer);
+      const phrase = this.buffer.slice(0, cut).trim();
+      this.buffer = this.buffer.slice(cut).trimStart();
+      return [phrase, ...this.push("")];
+    }
     let cut = end + 1;
     while (cut < this.buffer.length && CLOSERS.has(this.buffer[cut])) cut++;
     while (cut < this.buffer.length && isSpace(this.buffer[cut])) cut++;

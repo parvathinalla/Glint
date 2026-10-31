@@ -97,7 +97,7 @@ describe("streaming voice client", () => {
       t.sockets[0].sent.filter((x) => x instanceof Uint8Array),
     ).toHaveLength(0);
   });
-  it("caps pre-open buffering to the latest audio", () => {
+  it("reports lost pre-open audio rather than accepting a truncated transcript", () => {
     const t = setup();
     t.client.connect();
     t.sockets[0].open();
@@ -108,8 +108,32 @@ describe("streaming voice client", () => {
     const binary = t.sockets[0].sent.filter(
       (x) => x instanceof Uint8Array,
     ) as Uint8Array[];
-    expect(binary).toHaveLength(1);
-    expect(binary[0][0]).toBe(2);
+    expect(binary).toHaveLength(0);
+    expect(t.events).toEqual(["gap"]);
+  });
+  it("flushes a short turn's audio before end when the open ack is delayed", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(1, "a");
+    t.client.audio(new Uint8Array([7, 7]));
+    t.client.end();
+    expect(t.sockets[0].sent).toHaveLength(1);
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
+    expect(t.sockets[0].sent[1]).toEqual(new Uint8Array([7, 7]));
+    expect(JSON.parse(t.sockets[0].sent[2] as string)).toEqual({ type: "end" });
+  });
+  it("stops forwarding PCM after a rejected open instead of flooding canceled errors", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(1, "a");
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
+    t.sockets[0].serverSend(JSON.stringify({ type: "error", code: "CANCELED", message: "No stream" }));
+    const sent = t.sockets[0].sent.length;
+    t.client.audio(new Uint8Array([7, 7]));
+    t.client.end();
+    expect(t.sockets[0].sent).toHaveLength(sent);
   });
   it("generates a request id when the caller passes none", () => {
     const t = setup();
@@ -124,6 +148,7 @@ describe("streaming voice client", () => {
     const t = setup();
     t.client.connect();
     t.sockets[0].open();
+    t.client.open(0, "first");
     for (const frame of [
       { type: "opened" },
       { type: "partial", text: "salt" },
@@ -167,6 +192,34 @@ describe("streaming voice client", () => {
     expect(t.sockets[0].sent).toHaveLength(1);
     t.sockets[0].serverClose(1001);
     expect(t.events).toHaveLength(1);
+  });
+  it("opens a fresh socket for the next turn after a network disconnect", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(0, "first");
+    t.sockets[0].serverClose(1006);
+    t.client.open(1, "next");
+    expect(t.sockets).toHaveLength(2);
+    // Late messages from the dead socket cannot settle the next turn.
+    t.sockets[0].serverSend(JSON.stringify({ type: "final", transcript: "old" }));
+    t.sockets[1].open();
+    expect(t.sockets[1].json()).toEqual([{ type: "open", epoch: 1, requestId: "next" }]);
+    t.sockets[1].serverSend(JSON.stringify({ type: "opened" }));
+    t.client.audio(new Uint8Array([7, 7]));
+    t.sockets[1].serverSend(JSON.stringify({ type: "final", transcript: "new" }));
+    expect(t.events).toEqual(["closed:1006:false:", "opened", "final:new"]);
+    expect(t.sockets[1].sent[1]).toEqual(new Uint8Array([7, 7]));
+  });
+  it("an oversized first audio chunk also selects complete-recording fallback", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(0, "first");
+    t.client.audio(new Uint8Array(144001));
+    expect(t.events).toEqual(["gap"]);
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
+    expect(t.sockets[0].sent).toHaveLength(1);
   });
   it("throws when sending before connect and stays silent after dispose", () => {
     const t = setup();

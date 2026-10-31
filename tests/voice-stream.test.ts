@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { WebSocket, WebSocketServer } from "ws";
 import { Engine } from "../server/engine.ts";
 import { Store } from "../server/store.ts";
 import type { Provider } from "../server/provider.ts";
@@ -78,6 +80,40 @@ function setup() {
 }
 
 describe("/voice-stream transport", () => {
+  it("handles real ws text Buffers as control and binary Buffers as audio", async () => {
+    const t = setup();
+    await t.engine.connect(t.session, "TEST_ONLY_KEY");
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await once(server, "listening");
+    let textWasBuffer = false;
+    server.on("connection", socket => {
+      socket.on("message", (data, binary) => {
+        if (!binary) textWasBuffer = Buffer.isBuffer(data);
+      });
+      handleVoiceSocket(socket, t.session, t.engine);
+    });
+    const address = server.address() as { port: number };
+    const client = new WebSocket(`ws://127.0.0.1:${address.port}`);
+    try {
+      await once(client, "open");
+      const opened = once(client, "message");
+      client.send(JSON.stringify({ type: "open", requestId: randomUUID(), epoch: t.session.epoch }));
+      expect(JSON.parse(String((await opened)[0]))).toEqual({ type: "opened" });
+      expect(textWasBuffer).toBe(true);
+      t.ack();
+      client.send(Buffer.from([7, 7]));
+      await vi.waitFor(() => expect(t.sockets[0].binary()).toHaveLength(1));
+      client.send(JSON.stringify({ type: "end" }));
+      await vi.waitFor(() => expect(JSON.parse(t.sockets[0].sent.at(-1) as string)).toEqual({ type: "endStream" }));
+      const closed = once(client, "message");
+      client.send(JSON.stringify({ type: "close" }));
+      expect(JSON.parse(String((await closed)[0]))).toMatchObject({ type: "closed" });
+    } finally {
+      client.terminate();
+      for (const peer of server.clients) peer.terminate();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
   it("opens a stream, forwards audio and transcripts, ends cleanly", async () => {
     const t = setup();
     await t.engine.connect(t.session, "TEST_ONLY_KEY");

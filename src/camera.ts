@@ -13,6 +13,8 @@ export function useCamera(onProblem: (s: string) => void) {
   );
   const [active, setActive] = useState(false);
   const [starting, setStarting] = useState(false);
+  const facing = useRef<"environment" | "user">("environment");
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [hint, setHint] = useState(
     "A steady, well-lit view helps me help you.",
   );
@@ -75,7 +77,7 @@ export function useCamera(onProblem: (s: string) => void) {
           width: { ideal: 1280 },
           height: { ideal: 720 },
           frameRate: { ideal: 15, max: 24 },
-          facingMode: { ideal: "environment" },
+          facingMode: { ideal: facing.current },
         },
         audio: false,
       });
@@ -84,6 +86,10 @@ export function useCamera(onProblem: (s: string) => void) {
         return false;
       }
       stream.current = media;
+      const actualFacing = media.getVideoTracks()[0].getSettings?.().facingMode;
+      if (actualFacing === "user" || actualFacing === "environment")
+        facing.current = actualFacing;
+      setFacingMode(facing.current);
       if (video.current) {
         video.current.srcObject = media;
         await video.current.play();
@@ -148,6 +154,10 @@ export function useCamera(onProblem: (s: string) => void) {
       return false;
     }
   }, [stop, sample, onProblem]);
+  const flip = useCallback(async () => {
+    facing.current = facing.current === "environment" ? "user" : "environment";
+    return start();
+  }, [start]);
   const recent = useCallback(() => {
     const selected: Frame[] = [];
     for (const frame of [...ring.current].reverse()) {
@@ -159,7 +169,7 @@ export function useCamera(onProblem: (s: string) => void) {
     return selected.reverse();
   }, []);
   useEffect(() => () => stop(), [stop]);
-  return { video, active, starting, start, stop, sample, recent, hint, buffer };
+  return { video, active, starting, start, stop, sample, recent, hint, buffer, flip, facingMode };
 }
 export async function encodeCameraFrames(
   frames: Frame[],

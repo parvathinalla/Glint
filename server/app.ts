@@ -59,7 +59,7 @@ function validateCameraImage(image: string, maxBytes = 600000) {
 export type VoiceSocket = {
   send(data: string): void;
   close(code?: number, reason?: string): void;
-  on(event: "message", listener: (data: unknown) => void): void;
+  on(event: "message", listener: (data: unknown, isBinary?: boolean) => void): void;
   on(event: "close", listener: () => void): void;
 };
 /**
@@ -125,8 +125,14 @@ export function handleVoiceSocket(
       });
     }
   };
-  client.on("message", (data) => {
+  client.on("message", (data, isBinary) => {
     try {
+      // Node ws supplies Buffers for text frames too. Use its opcode flag
+      // before deciding whether this is JSON control or microphone PCM.
+      if (isBinary === false && typeof data !== "string") {
+        const bytes = toVoiceBytes(data);
+        if (bytes) data = Buffer.from(bytes).toString("utf8");
+      }
       if (typeof data !== "string") {
         const bytes = toVoiceBytes(data);
         if (!bytes) {
@@ -351,19 +357,28 @@ export function createApp(engine: Engine, origin: string, production = false) {
       const session = s(res);
       let finished = false;
       const emit = (event: unknown) => {
-        if (!res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`);
+        if (!res.destroyed) {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          if (typeof event === "object" && event !== null &&
+              "type" in event && event.type === "audio" && "seq" in event)
+            console.info(`[glint-voice] audio queued to browser seq=${event.seq}`);
+        }
       };
       // The neural voice loads beside the LLM stream so cold starts never
       // delay text; early deltas buffer until the voice announces itself.
       let tts: TtsStream | null = null;
       let buffered = "";
+      let receivedText = false;
       res.on("close", () => {
+        if (!finished && tts)
+          console.info("[glint-voice] reply connection closed before voice finished");
         tts?.cancel();
         if (!finished && session.epoch === input.epoch)
           engine.phase(session, "paused");
       });
       try {
         const replyPromise = engine.converse(session, input, (text) => {
+          if (text) receivedText = true;
           emit({ type: "delta", text });
           if (tts) tts.push(text);
           else buffered += text;
@@ -387,6 +402,9 @@ export function createApp(engine: Engine, origin: string, production = false) {
           } else emit({ type: "voice", mode: "none" });
         }
         const reply = await replyPromise;
+        // Research and JSON provider responses do not emit text deltas.
+        // Feed their final text to the same voice pipeline exactly once.
+        if (tts && !receivedText) tts.push(reply.message);
         emit({ type: "done", reply });
         if (tts) {
           await tts.finish();

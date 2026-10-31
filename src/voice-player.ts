@@ -60,7 +60,7 @@ export class VoicePlayer {
    */
   unlock() {
     const ctx = this.ensureCtx();
-    if (ctx && ctx.state === "suspended") void ctx.resume();
+    if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
     this.robot.unlock();
   }
   /** Snapshot for the on-screen voice note and tests. */

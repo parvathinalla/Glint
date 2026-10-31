@@ -125,6 +125,30 @@
   display: flex;
   gap: 8px;
 }
+.companion-camera.is-fullscreen .camera-flip {
+  left: auto;
+  right: 16px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+}
+.companion-camera.is-fullscreen .button:not(.camera-flip) {
+  max-width: calc(100% - 180px);
+  white-space: normal;
+}
+.camera-transcript {
+  position: absolute;
+  top: max(65px, calc(env(safe-area-inset-top) + 55px));
+  left: 5%;
+  right: 5%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  line-height: 1.4;
+  max-height: 25vh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
 .companion-subtitles {
   position: absolute;
   left: 50%;

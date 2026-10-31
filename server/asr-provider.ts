@@ -300,6 +300,7 @@ export class VoiceStream {
   private closed = false;
   private endRequested = false;
   private finalized = false;
+  private forwardedAudio = false;
   private attempt = 0;
   private firstDisconnectAt: number | undefined;
   constructor(
@@ -325,6 +326,7 @@ export class VoiceStream {
       return;
     }
     if (this.session?.state === "ready") {
+      this.forwardedAudio = true;
       this.session.sendAudio(pcm);
       return;
     }
@@ -350,12 +352,16 @@ export class VoiceStream {
     this.pendingBytes = 0;
   }
   private connectSession() {
+    this.forwardedAudio = false;
     const session = new RealtimeSession(
       this.key,
       {
         onReady: () => {
           if (this.closed) return;
-          for (const chunk of this.pending) session.sendAudio(chunk);
+          for (const chunk of this.pending) {
+            this.forwardedAudio = true;
+            session.sendAudio(chunk);
+          }
           this.pending = [];
           this.pendingBytes = 0;
           if (this.endRequested && session.state === "ready")
@@ -408,6 +414,12 @@ export class VoiceStream {
     if (!info.retryable || this.endRequested || this.finalized) {
       terminal();
       return;
+    }
+    // Reconnection creates a new recognizer, not a resume of the old one.
+    // Its transcript cannot contain audio consumed by the old session.
+    if (this.forwardedAudio) {
+      this.events.onGap();
+      if (this.closed) return;
     }
     const now = (this.options.now ?? Date.now)();
     if (this.firstDisconnectAt === undefined) this.firstDisconnectAt = now;

@@ -306,6 +306,17 @@ describe("voice stream lifecycle", () => {
     expect(t.sockets).toHaveLength(2);
     expect(t.events).toContain("closed:1013:false:reconnect-budget-exhausted");
   });
+  it("marks recognition context lost when reconnecting after audio was consumed", async () => {
+    const t = streamSetup();
+    t.stream.open();
+    t.ack(t.sockets[0]);
+    t.stream.audio(new Uint8Array([1, 2]));
+    t.sockets[0].serverClose(1013);
+    expect(t.events).toContain("gap");
+    await tick();
+    await tick();
+    expect(t.sockets).toHaveLength(2);
+  });
   it("drops overflowed gap audio and marks the gap", () => {
     const t = streamSetup();
     t.stream.open();

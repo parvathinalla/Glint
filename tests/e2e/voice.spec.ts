@@ -24,7 +24,7 @@ async function syntheticMicrophone(page: Page) {
       navigator.mediaDevices,
     );
     const fixture = window as unknown as {
-      voiceFixture: { say: () => void; media: MediaStream };
+      voiceFixture: { say: (seconds?: number) => void; media: MediaStream };
     };
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       if (!constraints?.audio || constraints.video) return actual(constraints);
@@ -40,9 +40,9 @@ async function syntheticMicrophone(page: Page) {
       await context.resume();
       fixture.voiceFixture = {
         media: output.stream,
-        say: () => {
+        say: (seconds = 0.7) => {
           gain.gain.setValueAtTime(0.12, context.currentTime);
-          gain.gain.setValueAtTime(0, context.currentTime + 0.7);
+          gain.gain.setValueAtTime(0, context.currentTime + seconds);
         },
       };
       return output.stream;
@@ -100,6 +100,36 @@ async function startVoice(page: Page) {
     page.getByRole("button", { name: "End voice chat", exact: true }),
   ).toBeVisible();
 }
+
+test("opening the camera unlocks playback before requesting camera permission", async ({ page, context }) => {
+  await context.grantPermissions(["camera", "microphone"]);
+  await neuralClient(page);
+  await page.addInitScript(() => {
+    const state = window as unknown as { audioUnlocked: boolean; cameraSawUnlock: boolean };
+    state.audioUnlocked = false;
+    const ActualContext = window.AudioContext;
+    window.AudioContext = class extends ActualContext {
+      constructor(options?: AudioContextOptions) {
+        super(options);
+        state.audioUnlocked = navigator.userActivation.isActive;
+      }
+    };
+    const resume = AudioContext.prototype.resume;
+    AudioContext.prototype.resume = function () {
+      state.audioUnlocked = true;
+      return resume.call(this);
+    };
+    const getMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = constraints => {
+      if (constraints?.video) state.cameraSawUnlock = state.audioUnlocked;
+      return getMedia(constraints);
+    };
+  });
+  await page.routeWebSocket("**/events", () => {});
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { cameraSawUnlock: boolean }).cameraSawUnlock)).toBe(true);
+});
 
 test("neural voice speaks streamed sentences without device speech", async ({
   page,
@@ -186,6 +216,68 @@ test("neural voice speaks streamed sentences without device speech", async ({
   );
   expect(voice).toBe("neural");
   await expect(page.getByText("Neural voice · sentence 2")).toBeVisible();
+});
+
+test("neural audio plays a completed reply without text deltas or duplicate device speech", async ({ page, context }) => {
+  await context.grantPermissions(["microphone"]);
+  await syntheticMicrophone(page);
+  await neuralClient(page);
+  await connectedSession(page);
+  await page.route("**/api/voice", async route => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: { transcript: "Please help me.", epoch: body.epoch } });
+  });
+  await page.route("**/api/agent/stream", async route => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ contentType: "text/event-stream", body: sse(
+      { type: "voice", mode: "neural", sampleRate: 24000, voice: "mock" },
+      { type: "done", reply: { message: "Ready to help.", sources: [], searched: false, epoch: body.epoch } },
+      { type: "audio", seq: 0, text: "Ready to help.", pcm: pcm(0.3), sampleRate: 24000 },
+      { type: "voice-done" },
+    ) });
+  });
+  await startVoice(page);
+  await page.waitForTimeout(600);
+  await say(page);
+  await expect(page.getByText("Ready to help.", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { heard: unknown[] }).heard.length)).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as { spoken: string[] }).spoken)).toEqual([]);
+});
+
+test("a dropped microphone burst does not abort audio still being generated", async ({ page, context }) => {
+  await context.grantPermissions(["microphone"]);
+  await syntheticMicrophone(page);
+  await neuralClient(page);
+  await connectedSession(page);
+  await page.route("**/api/voice", async route => {
+    const body = route.request().postDataJSON();
+    await route.fulfill({ json: { transcript: "Please help me.", epoch: body.epoch } });
+  });
+  let requests = 0;
+  let release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/agent/stream", async route => {
+    requests++;
+    const body = route.request().postDataJSON();
+    await ready;
+    await route.fulfill({ contentType: "text/event-stream", body: sse(
+      { type: "voice", mode: "neural", sampleRate: 24000, voice: "mock" },
+      { type: "delta", text: "The audio survived. " },
+      { type: "done", reply: { message: "The audio survived.", sources: [], searched: false, epoch: body.epoch } },
+      { type: "audio", seq: 0, text: "The audio survived.", pcm: pcm(0.3), sampleRate: 24000 },
+      { type: "voice-done" },
+    ) });
+  });
+  await startVoice(page);
+  await page.waitForTimeout(600);
+  await say(page);
+  await expect.poll(() => requests).toBe(1);
+  // Long enough to trigger the onset detector, too short to submit speech.
+  await page.evaluate(() => (window as unknown as { voiceFixture: { say: (seconds: number) => void } }).voiceFixture.say(0.18));
+  await page.waitForTimeout(1400);
+  release();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { heard: Array<{ text: string }> }).heard.map(x => x.text))).toContain("The audio survived.");
+  expect(requests).toBe(1);
 });
 
 test("the kill switch keeps device speech and asks for no voice", async ({

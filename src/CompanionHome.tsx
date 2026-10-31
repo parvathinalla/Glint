@@ -9,6 +9,7 @@ import {
   ArrowUp,
   Camera,
   CameraOff,
+  SwitchCamera,
   Captions,
   Link,
   LoaderCircle,
@@ -332,11 +333,8 @@ export function CompanionHome({
     voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
   ) {
     if (lock.current) {
-      if (visualJob.current) await interrupt(false);
+      if (visualJob.current || voiceInput) await interrupt(false);
       else {
-        // Swallowed turn: drop its speaker check so it can never judge a
-        // later turn (exact claim — other turns' checks are untouched).
-        if (voiceInput) speakerChecks.current.claim(voiceInput.audio);
         return;
       }
     }
@@ -646,7 +644,8 @@ export function CompanionHome({
           deferredSpeechCancel = false;
           stopSpeech();
         }
-        if (!streamed) speech.current?.push(result.message);
+        if (!streamed && !neuralReply.current)
+          speech.current?.push(result.message);
         if (!neuralReply.current) speech.current?.finish();
       }
     } catch (error) {
@@ -705,7 +704,10 @@ export function CompanionHome({
         // Dropped turns send nothing and get no check; the rest verify.
         if (decision === "fallback") {
           startSpeakerCheck(audio, stats.voicedMs);
-          void send("", undefined, camera.active, { audio });
+          void send("", undefined, camera.active, {
+            audio,
+            note: "Sent as a voice recording (live transcription unavailable).",
+          });
         } else if (decision === "store")
           startSpeakerCheck(audio, stats.voicedMs);
         return;
@@ -734,8 +736,12 @@ export function CompanionHome({
         timing.bargeDetectMs = Date.now();
       // Soft-stop: the burst may still prove to be speaker echo, so the
       // unheard queue is preserved until the transcript verdict.
-      cancelWork(true);
-      // cancelWork() stops local speech synchronously, so this mark lands
+      // A detector onset is only a candidate interruption. Keep receiving
+      // reply audio until a completed voice turn actually supersedes it.
+      // Otherwise a short noise burst can cancel Kokoro before its first
+      // sentence is ready, leaving visible text with no playable audio.
+      stopSpeech(true);
+      // stopSpeech() stops local speech synchronously, so this mark lands
       // right after the playback stop it measures.
       const stopped = activeVoice.current;
       if (
@@ -744,18 +750,16 @@ export function CompanionHome({
         stopped.playbackStopMs === undefined
       )
         stopped.playbackStopMs = Date.now();
-      // Server invalidation waits for confirmation: only a turn still
-      // alive after the delay invalidates the epoch and opens the lane,
-      // so pops and noise bursts never churn the session.
+      // Only a turn still alive after confirmation opens the ASR lane.
+      // Server invalidation waits for its completed transcript in send().
       if (bargeTimer.current) clearTimeout(bargeTimer.current);
       bargeTimer.current = setTimeout(() => {
         bargeTimer.current = null;
         if (!bargeAlive.current) return;
-        void (async () => {
-          await pauseServer(false);
-          if (!bargeAlive.current) return;
-          openLaneForTurn();
-        })();
+        // ASR can listen beside reply generation. Invalidating the server
+        // here would cancel the response even if this turns out to be echo
+        // or a dropped burst. send() supersedes it after a real final turn.
+        openLaneForTurn();
       }, BARGE_CONFIRM_MS);
     },
     speaking,
@@ -973,7 +977,10 @@ export function CompanionHome({
     if (!isStreamingVoiceEnabled()) return;
     streamingMode.current = true;
     const fallback = (audio: Blob) =>
-      void sendRef.current("", undefined, cameraActive.current, { audio });
+      void sendRef.current("", undefined, cameraActive.current, {
+        audio,
+        note: "Sent as a voice recording (live transcription unavailable).",
+      });
     const finishStreamed = (transcript: string) => {
       if (!turns.current.finalArrived()) return;
       setPartial("");
@@ -1007,8 +1014,12 @@ export function CompanionHome({
       },
       onTurn: (_id, transcript) => finishStreamed(transcript),
       onFinal: (transcript) => finishStreamed(transcript),
-      // A shed-audio gap still ends in a final or a failure; nothing to show.
-      onGap: () => {},
+      onGap: () => {
+        // A transcript after lost audio may omit words. Use the whole
+        // locally recorded turn rather than answer a truncated question.
+        failStream();
+        voice.current?.closeStream();
+      },
       onClosed: (info) => {
         const answered = failStream();
         if (!answered && info.reason === "allowance-exhausted")
@@ -1068,6 +1079,8 @@ export function CompanionHome({
   }, [linkOpen]);
   function submit(event: FormEvent) {
     event.preventDefault();
+    speech.current?.unlock();
+    voicePlayer.current?.unlock();
     if (question.trim()) void send(question.trim(), undefined, camera.active);
   }
   // Voice state machine, derived so it cannot disagree with the flags.
@@ -1079,6 +1092,8 @@ export function CompanionHome({
         ? "processing"
         : "idle";
   const enterFullscreen = () => {
+    speech.current?.unlock();
+    voicePlayer.current?.unlock();
     setFullscreen(true);
     if (view.key.connected && !mic.enabled) void mic.start();
     else if (!view.key.connected) connect();
@@ -1112,6 +1127,10 @@ export function CompanionHome({
               readAloud ? "Mute spoken replies" : "Enable spoken replies"
             }
             onClick={() => {
+              if (!readAloud) {
+                speech.current?.unlock();
+                voicePlayer.current?.unlock();
+              }
               aloud.current = !readAloud;
               setReadAloud(!readAloud);
               stopSpeech();
@@ -1150,7 +1169,7 @@ export function CompanionHome({
         {speakerNote && (
           <p className="companion-speaker-note">{speakerNote}</p>
         )}
-        {partial && <p className="companion-partial">{partial}</p>}
+        {!fullscreen && partial && <p className="companion-partial" aria-live="polite">{partial}</p>}
         {(busy || speaking) && (
           <button className="text-button" onClick={() => void interrupt(false)}>
             Interrupt
@@ -1168,6 +1187,21 @@ export function CompanionHome({
           />
           {camera.active && (
             <>
+              <button
+                className="button camera-flip"
+                aria-label={camera.facingMode === "environment" ? "Switch to front camera" : "Switch to back camera"}
+                disabled={camera.starting}
+                onClick={() => {
+                  void interrupt(false, true).then(() => camera.flip()).then(ok => {
+                    if (ok) setFullscreen(true);
+                  });
+                }}
+              ><SwitchCamera size={18} /> Flip camera</button>
+              {fullscreen && (partial || messages.filter(m => m.who === "you").at(-1)?.text) && (
+                <p className="camera-transcript" aria-live="polite">
+                  You: {partial || messages.filter(m => m.who === "you").at(-1)?.text}
+                </p>
+              )}
               <div className="live-caption">
                 <i /> Camera awareness on
               </div>
@@ -1379,6 +1413,10 @@ export function CompanionHome({
                   camera.stop();
                   void interrupt(false, true);
                 } else {
+                  // Unlock while the tap is still active, before camera
+                  // permission/startup awaits lose mobile user activation.
+                  speech.current?.unlock();
+                  voicePlayer.current?.unlock();
                   setProblem("");
                   void camera.start().then((ok) => {
                     if (ok) enterFullscreen();

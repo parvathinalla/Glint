@@ -395,6 +395,12 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
       code: "APP_LIMIT",
     });
   });
+  it("returns no-speech WAV transcripts without treating them as a fatal error", async () => {
+    const provider = new AgentProvider((async () => Response.json({ transcript: "  " })) as typeof fetch);
+    expect(await provider.transcribe("TEST_ONLY_KEY", new Uint8Array(48), new AbortController().signal)).toBe("");
+    const malformed = new AgentProvider((async () => Response.json({ unrelated: "data" })) as typeof fetch);
+    await expect(malformed.transcribe("TEST_ONLY_KEY", new Uint8Array(48), new AbortController().signal)).rejects.toMatchObject({ code: "NO_SPEECH" });
+  });
   it("uses Meta WAV transcription and sanitizes provider errors", async () => {
     const provider = new AgentProvider((async (url, init) => {
       expect(url).toBe("https://api.meta.ai/v1/asr/transcribe");

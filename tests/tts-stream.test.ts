@@ -17,6 +17,17 @@ class ScriptedVoice implements GlintVoice {
 const tone = (seconds: number) =>
   new Float32Array(Math.round(seconds * 24000)).fill(0.1);
 
+it("routes Telugu to device speech without invoking the English Kokoro lexicon", async () => {
+  const voice = new ScriptedVoice(() => tone(0.5));
+  voice.name = "kokoro-af-heart";
+  const events: TtsEvent[] = [];
+  const stream = new TtsStream(voice, event => events.push(event));
+  stream.push("నమస్కారం. ");
+  await stream.finish();
+  expect(voice.texts).toEqual([]);
+  expect(events).toEqual([{ type: "audio-error", seq: 0, text: "నమస్కారం." }]);
+});
+
 it("announces the neural voice before any audio", async () => {
   const events: TtsEvent[] = [];
   const stream = new TtsStream(new MockVoice(), (event) => events.push(event));

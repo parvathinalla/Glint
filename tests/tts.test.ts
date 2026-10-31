@@ -5,6 +5,27 @@ import {
   type VoiceSample,
 } from "../server/tts.ts";
 
+it("skips canceled synthesis waiting behind an active sentence", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const calls: string[] = [];
+  const voice = serializeVoice({ name: "test", sampleRate: 24000, async synth(text) {
+    calls.push(text);
+    if (text === "first") await gate;
+    return { samples: new Float32Array(10), sampleRate: 24000 };
+  } });
+  const first = voice.synth("first");
+  const controller = new AbortController();
+  const second = voice.synth("obsolete", controller.signal);
+  const rejected = expect(second).rejects.toThrow();
+  controller.abort();
+  release();
+  await first;
+  await rejected;
+  await voice.synth("new reply");
+  expect(calls).toEqual(["first", "new reply"]);
+});
+
 it("serializes concurrent synths FIFO without overlap", async () => {
   let active = 0,
     maxActive = 0;

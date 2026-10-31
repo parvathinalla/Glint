@@ -22,6 +22,7 @@ export class TtsStream {
   private tail: Promise<void> = Promise.resolve();
   private seq = 0;
   private cancelled = false;
+  private controller = new AbortController();
   private announced = false;
   constructor(
     private voice: GlintVoice,
@@ -50,6 +51,7 @@ export class TtsStream {
   }
   cancel() {
     this.cancelled = true;
+    this.controller.abort();
   }
   private enqueue(raw: string) {
     const text = cleanSpeakText(raw);
@@ -57,9 +59,15 @@ export class TtsStream {
     const seq = this.seq++;
     this.tail = this.tail.then(async () => {
       if (this.cancelled) return;
+      // The installed Kokoro voice uses an English lexicon. Do not spend
+      // CPU silently skipping Telugu words; let the device voice try them.
+      if (this.voice.name === "kokoro-af-heart" && /[\u0C00-\u0C7F]/u.test(text)) {
+        this.emit({ type: "audio-error", seq, text });
+        return;
+      }
       try {
         const started = performance.now();
-        const audio = await this.voice.synth(text);
+        const audio = await this.voice.synth(text, this.controller.signal);
         this.options.onTiming?.(
           Math.round(performance.now() - started),
           text.length,

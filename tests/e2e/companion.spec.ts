@@ -374,7 +374,8 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
   });
 });
 
-test("streaming voice shows partials and sends without a file upload (mock socket)", async ({
+for (const losesAudio of [false, true]) {
+test(`streaming voice ${losesAudio ? "uses the complete recording after an audio gap" : "shows partials and sends without a file upload"} (mock socket)`, async ({
   page,
   context,
 }) => {
@@ -390,7 +391,10 @@ test("streaming voice shows partials and sends without a file upload (mock socke
     agentRequests = 0;
   await page.route("**/api/voice", async (route) => {
     voiceRequests++;
-    await route.fulfill({ status: 500, json: { message: "must not happen" } });
+    if (losesAudio) {
+      const body = route.request().postDataJSON();
+      await route.fulfill({ json: { transcript: "Help me build this organizer.", epoch: body.epoch } });
+    } else await route.fulfill({ status: 500, json: { message: "must not happen" } });
   });
   await page.route("**/api/agent/stream", async (route) => {
     const body = route.request().postDataJSON();
@@ -410,7 +414,11 @@ test("streaming voice shows partials and sends without a file upload (mock socke
       if (typeof message !== "string") {
         if (!partialSent) {
           partialSent = true;
-          ws.send(JSON.stringify({ type: "partial", text: "Help me" }));
+          if (losesAudio) {
+            ws.send(JSON.stringify({ type: "gap" }));
+            // A delayed, incomplete result must not create a second answer.
+            ws.send(JSON.stringify({ type: "final", transcript: "organizer" }));
+          } else ws.send(JSON.stringify({ type: "partial", text: "Help me" }));
         }
         return;
       }
@@ -440,7 +448,7 @@ test("streaming voice shows partials and sends without a file upload (mock socke
       window as unknown as { voiceFixture: { say: () => void } }
     ).voiceFixture.say(),
   );
-  await expect(page.getByText("Help me", { exact: true })).toBeVisible();
+  if (!losesAudio) await expect(page.getByText("Help me", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Help me build this organizer.", { exact: true }),
   ).toBeVisible();
@@ -449,14 +457,15 @@ test("streaming voice shows partials and sends without a file upload (mock socke
       exact: true,
     }),
   ).toBeVisible();
-  expect(voiceRequests).toBe(0);
+  expect(voiceRequests).toBe(losesAudio ? 1 : 0);
   expect(agentRequests).toBe(1);
   await expect(
     page.getByText("Sent as a voice recording (live transcription unavailable).", {
       exact: true,
     }),
-  ).toHaveCount(0);
+  ).toHaveCount(losesAudio ? 1 : 0);
 });
+}
 
 test("voice can interrupt read-aloud and continue with a new automatic turn", async ({
   page,

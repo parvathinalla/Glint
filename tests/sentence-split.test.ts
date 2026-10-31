@@ -1,6 +1,14 @@
 import { expect, it } from "vitest";
 import { SentenceStream } from "../shared/sentence-split.ts";
 
+it("starts a long streamed sentence before final punctuation without losing words", () => {
+  const stream = new SentenceStream();
+  const text = "First place the cup on a stable table and keep the handle facing toward you while you carefully pour the water into the cup";
+  const early = stream.push(text);
+  expect(early.length).toBeGreaterThan(0);
+  expect([...early, ...stream.finish()].join(" ")).toBe(text);
+});
+
 it("emits nothing until a sentence boundary arrives", () => {
   const stream = new SentenceStream();
   expect(stream.push("Hello there")).toEqual([]);

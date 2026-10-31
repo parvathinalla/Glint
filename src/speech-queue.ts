@@ -127,7 +127,11 @@ export class SpeechQueue {
     const version = this.generation,
       utterance = new SpeechSynthesisUtterance(text);
     this.ensureVoices(window.speechSynthesis);
-    const voice = this.pickVoice();
+    const telugu = /[\u0C00-\u0C7F]/u.test(text);
+    const voice = telugu
+      ? this.voices.find(v => v.lang.toLowerCase().startsWith("te"))
+      : this.pickVoice();
+    if (telugu) utterance.lang = "te-IN";
     if (voice) utterance.voice = voice;
     this.active = true;
     this.changed(true);

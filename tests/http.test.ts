@@ -201,6 +201,30 @@ describe("HTTP isolation and validation", () => {
       delete process.env.GLINT_TTS_MOCK;
     }
   });
+  it("synthesizes a complete JSON reply when the provider sends no text deltas", async () => {
+    process.env.GLINT_TTS_MOCK = "1";
+    try {
+      const agent = new AgentProvider((async () => Response.json({
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: "Ready to help." }] }],
+      })) as typeof fetch);
+      const f = await fixture(undefined, agent);
+      const view = await (await f.call("key", { key: "TEST_ONLY_KEY" })).json() as View;
+      const response = await f.call("agent/stream", {
+        question: "Hello", model: "muse-spark-test", epoch: view.epoch,
+        requestId: randomUUID(), voice: "neural",
+      });
+      const events = (await response.text()).split("\n\n").filter(Boolean)
+        .map(block => JSON.parse(block.replace(/^data: /, "")));
+      expect(events.some(event => event.type === "delta")).toBe(false);
+      expect(events.filter(event => event.type === "audio")).toEqual([
+        expect.objectContaining({ seq: 0, text: "Ready to help.", pcm: expect.any(String) }),
+      ]);
+      expect(events.at(-1).type).toBe("voice-done");
+    } finally {
+      delete process.env.GLINT_TTS_MOCK;
+    }
+  });
   it("emits no voice events when the neural voice is off", async () => {
     process.env.GLINT_TTS_MOCK = "1";
     try {

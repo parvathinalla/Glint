@@ -354,7 +354,7 @@ export class AgentProvider {
       }),
     );
     const result = z
-      .object({ transcript: z.string().trim().min(1).max(2000) })
+      .object({ transcript: z.string().trim().max(2000) })
       .safeParse(body);
     if (!result.success)
       throw new Problem(

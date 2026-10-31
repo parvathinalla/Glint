@@ -6,7 +6,7 @@ export type VoiceSample = {
 export type GlintVoice = {
   name: string;
   sampleRate: number;
-  synth(text: string): Promise<VoiceSample>;
+  synth(text: string, signal?: AbortSignal): Promise<VoiceSample>;
   close?(): void;
 };
 /**
@@ -21,8 +21,11 @@ export function serializeVoice(voice: GlintVoice): GlintVoice {
     name: voice.name,
     sampleRate: voice.sampleRate,
     ...(voice.close ? { close: () => voice.close!() } : {}),
-    synth(text: string): Promise<VoiceSample> {
-      const run = () => voice.synth(text);
+    synth(text: string, signal?: AbortSignal): Promise<VoiceSample> {
+      const run = () => {
+        signal?.throwIfAborted();
+        return voice.synth(text, signal);
+      };
       const next = tail.then(run, run);
       tail = next.catch(() => {});
       return next;
