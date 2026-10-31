@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="380" viewBox="0 0 920 380" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <text x="36" y="30" font-size="18" font-weight="600" fill="#0f172a">Glint system</text>
+  <g font-size="12" font-weight="600" fill="#64748b" text-anchor="middle">
+    <text x="126" y="56">Browser</text>
+    <text x="430" y="56">Glint server &#183; laptop</text>
+    <text x="764" y="56">Meta cloud</text>
+  </g>
+
+  <!-- browser column -->
+  <g text-anchor="middle">
+    <rect x="36" y="70" width="180" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="126" y="94" font-size="13" font-weight="600" fill="#1e3a8a">Voice companion</text>
+    <text x="126" y="112" font-size="10.5" fill="#475569">talk &#183; interrupt &#183; owner-only</text>
+    <rect x="36" y="146" width="180" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="126" y="170" font-size="13" font-weight="600" fill="#1e3a8a">Camera</text>
+    <text x="126" y="188" font-size="10.5" fill="#475569">frames &#8594; observations</text>
+    <rect x="36" y="222" width="180" height="56" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="126" y="246" font-size="13" font-weight="600" fill="#1e3a8a">Chat + tasks</text>
+    <text x="126" y="264" font-size="10.5" fill="#475569">text &#183; steps &#183; confirm</text>
+  </g>
+
+  <!-- server column -->
+  <g text-anchor="middle">
+    <rect x="280" y="70" width="300" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="430" y="94" font-size="13" font-weight="600" fill="#14532d">Voice agent</text>
+    <text x="430" y="112" font-size="10.5" fill="#475569">STT &#8594; LLM &#8594; local TTS &#183; SSE stream</text>
+    <rect x="280" y="146" width="300" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="430" y="170" font-size="13" font-weight="600" fill="#14532d">Vision observe</text>
+    <text x="430" y="188" font-size="10.5" fill="#475569">frames + history &#8594; observation</text>
+    <rect x="280" y="222" width="300" height="56" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+    <text x="430" y="246" font-size="13" font-weight="600" fill="#14532d">Session + task engine</text>
+    <text x="430" y="264" font-size="10.5" fill="#475569">cookie + CSRF &#183; SQLite steps</text>
+  </g>
+
+  <!-- cloud column -->
+  <g text-anchor="middle">
+    <rect x="644" y="70" width="240" height="208" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+    <text x="764" y="98" font-size="13" font-weight="600" fill="#92400e">Meta cloud (user key)</text>
+    <text x="764" y="120" font-size="10.5" fill="#475569">api.meta.ai</text>
+    <text x="764" y="156" font-size="11" fill="#92400e">Muse Spark chat + vision</text>
+    <text x="764" y="176" font-size="11" fill="#92400e">realtime speech-to-text</text>
+    <text x="764" y="204" font-size="10.5" fill="#475569">key gate &#183; no key, no cloud</text>
+    <text x="764" y="240" font-size="10.5" fill="#475569">never retried automatically</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#475569" stroke-width="1.5">
+    <line x1="216" y1="98" x2="276" y2="98" marker-end="url(#arrow)"/>
+    <line x1="216" y1="174" x2="276" y2="174" marker-end="url(#arrow)"/>
+    <line x1="216" y1="250" x2="276" y2="250" marker-end="url(#arrow)"/>
+    <line x1="580" y1="98" x2="640" y2="98" marker-end="url(#arrow)"/>
+    <line x1="580" y1="174" x2="640" y2="174" marker-end="url(#arrow)"/>
+    <line x1="580" y1="250" x2="640" y2="250" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- local notes + legend -->
+  <text x="36" y="312" font-size="11" fill="#475569">On-device speech: Silero VAD &#183; WeSpeaker lock &#183; Kokoro TTS (RTF ~1.0). SQLite keeps tasks only, expiring; no keys, audio, or conversations persist.</text>
+  <g font-size="11" fill="#334155">
+    <rect x="36" y="326" width="14" height="14" rx="3" fill="#dbeafe" stroke="#2563eb"/>
+    <text x="56" y="337">browser</text>
+    <rect x="126" y="326" width="14" height="14" rx="3" fill="#dcfce7" stroke="#16a34a"/>
+    <text x="146" y="337">server (laptop)</text>
+    <rect x="252" y="326" width="14" height="14" rx="3" fill="#fef3c7" stroke="#d97706"/>
+    <text x="272" y="337">cloud</text>
+  </g>
+</svg>
