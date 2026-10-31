@@ -12,7 +12,7 @@ numbers; phone cells are marked PENDING until a human run fills them.
   (sandbox denies binds with EACCES).
 - Browser e2e: 36/36 on isolated port 3101 (system Chrome).
 - `tsc --noEmit` clean, `eslint` clean, `vite build` clean.
-- Real-model tests: Silero VAD, WeSpeaker, Kitten + Kokoro TTS (committed).
+- Real-model tests: Silero VAD, WeSpeaker, Kokoro TTS (committed).
 
 ## Phase 1 — turn-taking in background noise
 
@@ -44,19 +44,18 @@ human-feel confirmation is PENDING on phone.
 
 | Metric | Glint (measured) | Reported |
 |---|---|---|
-| Voice | Kitten Nano v0.2 fp16 (sherpa), 24 kHz, identical on all devices; Kokoro int8 fallback | Gemini: limited voice selection (inworld 2026 table) |
-| Synth speed | RTF ~0.24 laptop CPU (74 ch in 1.2 s; 10x faster than Kokoro's 12 s on the same phone run); non-blocking async | Native S2S streams sub-chunk (no sentence floor) |
-| First audio | After first sentence synths (~0.7 s typical opener + LLM time to that sentence) | Gemini Live ~400–600 ms API / ~1–3 s product; GPT-4o 232–320 ms (OpenAI) |
+| Voice | Kokoro int8 (sherpa), af_heart, 24 kHz, identical on all devices | Gemini: limited voice selection (inworld 2026 table) |
+| Synth speed | RTF ~1.0 whole-sentence, laptop CPU; non-blocking async | Native S2S streams sub-chunk (no sentence floor) |
+| First audio | After first sentence synths (~2–4 s typical opener + LLM time to that sentence) | Gemini Live ~400–600 ms API / ~1–3 s product; GPT-4o 232–320 ms (OpenAI) |
 | Failure mode | Per-sentence device-speech fallback; never silent; `glint-neural-voice=0` | Undisclosed |
 | Voice quality phone check | PENDING (human ear) | — |
 
 Surpasses on: cross-device consistency (one voice, not per-device
 robot), offline/no-per-call-cost, graceful fallback. Does NOT yet match
 native speech-to-speech first-audio latency: the sentence-synth floor
-(RTF 0.24) plus LLM time-to-first-sentence is ~1 s plus LLM time,
-not ~300 ms. KittenTTS Nano (the planned 3–5x probe) shipped as the
-default voice after measuring 10x on the failing phone sentences.
-Documented follow-ups: short-opener prompting, cloud TTS fallback.
+(RTF 1.0) plus LLM time-to-first-sentence is seconds, not ~300 ms.
+Documented follow-ups: KittenTTS Nano probe (3–5x faster synth),
+short-opener prompting, cloud TTS fallback.
 
 ## Phase 4 — speaker lock
 

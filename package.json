@@ -14,9 +14,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "postinstall": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-kitten.mjs",
-    "predev": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-kitten.mjs",
-    "prebuild": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-kitten.mjs"
+    "postinstall": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs",
+    "predev": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs",
+    "prebuild": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.2.0",

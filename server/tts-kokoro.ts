@@ -3,10 +3,6 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { GlintVoice, VoiceSample } from "./tts.ts";
 import { MockVoice, serializeVoice } from "./tts.ts";
-import {
-  SherpaKittenVoice,
-  kittenFilesPresent,
-} from "./tts-kitten.ts";
 /** af_heart in the sherpa Kokoro multi-lang speaker map (0-52). */
 export const KOKORO_VOICE_ID = 3;
 export const KOKORO_SAMPLE_RATE = 24000;
@@ -88,10 +84,10 @@ let cached: GlintVoice | null | undefined;
 let failedAt = 0;
 let pending: Promise<GlintVoice | null> | null = null;
 /**
- * The request-scoped voice: mock for tests, Kitten Nano when its files
- * are present, Kokoro as fallback, otherwise null (the reply falls
- * back to device speech). Concurrent first requests share one load;
- * failures retry after a minute so one bad model can't spam.
+ * The request-scoped voice: mock for tests, Kokoro when its files are
+ * present, otherwise null (the reply falls back to device speech).
+ * Concurrent first requests share one load; failures retry after a
+ * minute so one bad model can't spam.
  */
 export function getServerVoice(): Promise<GlintVoice | null> {
   if (process.env.GLINT_TTS_MOCK === "1")
@@ -102,7 +98,7 @@ export function getServerVoice(): Promise<GlintVoice | null> {
       return Promise.resolve(null);
     if (cached !== null) return Promise.resolve(cached);
   }
-  if (!kittenFilesPresent() && !kokoroFilesPresent()) {
+  if (!kokoroFilesPresent()) {
     cached = null;
     failedAt = Date.now();
     return Promise.resolve(null);
@@ -113,33 +109,19 @@ export function getServerVoice(): Promise<GlintVoice | null> {
   return pending;
 }
 async function loadVoice(): Promise<GlintVoice | null> {
-  const errors: string[] = [];
-  if (kittenFilesPresent()) {
-    try {
-      const voice = new SherpaKittenVoice();
-      await voice.synth("Glint voice ready.");
-      cached = serializeVoice(voice);
-      return cached;
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
+  try {
+    const voice = new SherpaKokoroVoice();
+    await voice.synth("Glint voice ready.");
+    cached = serializeVoice(voice);
+    return cached;
+  } catch (error) {
+    console.warn(
+      `The Glint neural voice failed to load (${error instanceof Error ? error.message : error}). Replies will use device speech.`,
+    );
+    cached = null;
+    failedAt = Date.now();
+    return null;
   }
-  if (kokoroFilesPresent()) {
-    try {
-      const voice = new SherpaKokoroVoice();
-      await voice.synth("Glint voice ready.");
-      cached = serializeVoice(voice);
-      return cached;
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  console.warn(
-    `The Glint neural voice failed to load (${errors.join("; ") || "no model files"}). Replies will use device speech.`,
-  );
-  cached = null;
-  failedAt = Date.now();
-  return null;
 }
 /** Test-only reset for the cached voice. */
 export function resetServerVoiceForTests() {
