@@ -45,6 +45,52 @@ function periodEnds(text: string, index: number): boolean {
   if (followed === "\n") return true;
   return /[A-Z0-9"“'‘([]/.test(followed);
 }
+/**
+ * Long sentences synth super-linearly (a 151-char sentence took 28 s on
+ * the server); clause chunks keep every synth short and stream earlier.
+ */
+const MAX_SENTENCE = 100;
+function findCut(text: string): number {
+  const window = text.slice(0, MAX_SENTENCE + 1);
+  const seps = [", ", "; ", ": ", " — "];
+  let cut = -1;
+  for (const sep of seps) {
+    const at = window.lastIndexOf(sep);
+    if (at > 20) cut = Math.max(cut, at + sep.length);
+  }
+  if (cut > 0) return cut;
+  const words = [
+    "and",
+    "but",
+    "or",
+    "so",
+    "because",
+    "when",
+    "while",
+    "after",
+    "before",
+  ];
+  for (const word of words) {
+    const at = window.lastIndexOf(` ${word} `);
+    if (at > 20) cut = Math.max(cut, at + 1);
+  }
+  if (cut > 0) return cut;
+  const space = window.lastIndexOf(" ");
+  if (space > 20) return space + 1;
+  return MAX_SENTENCE;
+}
+function chunkLong(sentence: string): string[] {
+  if (sentence.length <= MAX_SENTENCE) return [sentence];
+  const chunks: string[] = [];
+  let rest = sentence;
+  while (rest.length > MAX_SENTENCE) {
+    const cut = findCut(rest);
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
 export class SentenceStream {
   private buffer = "";
   /**
@@ -86,13 +132,13 @@ export class SentenceStream {
     if (this.buffer[cut] === "\n") cut++;
     const sentence = this.buffer.slice(0, cut).trim();
     this.buffer = this.buffer.slice(cut);
-    if (sentence) done.push(sentence);
+    if (sentence) done.push(...chunkLong(sentence));
     return done.concat(this.push(""));
   }
-  /** Flush any trailing fragment as one final sentence. */
+  /** Flush any trailing fragment, chunked when over-long. */
   finish(): string[] {
     const rest = this.buffer.trim();
     this.buffer = "";
-    return rest ? [rest] : [];
+    return rest ? chunkLong(rest) : [];
   }
 }

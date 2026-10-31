@@ -25,6 +25,9 @@ it("expands contractions missing from the Kokoro lexicon", () => {
     "You should have seen it, they would have loved it.",
   );
   expect(cleanSpeakText("Wait 'til morning.")).toBe("Wait until morning.");
+  expect(cleanSpeakText("That'll work and there'll be time.")).toBe(
+    "That will work and there will be time.",
+  );
 });
 
 it("leaves covered contractions and plain text alone", () => {

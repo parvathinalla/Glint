@@ -41,6 +41,28 @@ it("treats newlines as boundaries and drops empties", () => {
   expect(stream.finish()).toEqual([]);
 });
 
+it("splits over-long sentences into speakable clause chunks", () => {
+  const stream = new SentenceStream();
+  const long =
+    "Got you on here from your bedroom with white walls, a bed behind you, " +
+    "a couple little pictures on the wall, and a window off to the side. ";
+  const sentences = stream.push(`${long}Next. `);
+  expect(sentences.length).toBeGreaterThan(1);
+  for (const sentence of sentences) expect(sentence.length).toBeLessThanOrEqual(100);
+  expect(sentences.join(" ")).toBe(long.trim());
+  expect(stream.finish()).toEqual(["Next."]);
+});
+
+it("splits long sentences without commas at words", () => {
+  const stream = new SentenceStream();
+  const words = Array.from({ length: 30 }, (_, i) => `word${i}`).join(" ");
+  const sentences = stream.push(`${words}. Next. `);
+  expect(sentences.length).toBeGreaterThan(1);
+  for (const sentence of sentences) expect(sentence.length).toBeLessThanOrEqual(100);
+  expect(sentences.join(" ")).toBe(`${words}.`);
+  expect(stream.finish()).toEqual(["Next."]);
+});
+
 it("flushes a trailing fragment on finish and ignores blank input", () => {
   const stream = new SentenceStream();
   expect(stream.push("   ")).toEqual([]);

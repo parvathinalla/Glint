@@ -9,6 +9,8 @@ const EXPANSIONS: Record<string, string> = {
   "here's": "here is",
   "should've": "should have",
   "would've": "would have",
+  "that'll": "that will",
+  "there'll": "there will",
   "'til": "until",
 };
 function expandContractions(text: string): string {
