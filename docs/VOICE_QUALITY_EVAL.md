@@ -50,11 +50,9 @@ the same tests through each voice-isolation/transcription/speech candidate.
 | short | Owner says yes/no and short Telugu replies | Natural short replies work with the intended production settings |
 | network | Same question with a fixed throttling/disconnect profile | Recover without duplicate or truncated answers |
 
-Cover Telugu, English and mixed speech on Android and iPhone. Test enrollment
-off for the default no-setup experience, and separately test optional voice
-lock. Current strict voice lock rejects short unverified clips: this is a
-known limitation, not a passed short-answer test. Speaker verification does not
-implement acoustic voice isolation.
+Cover Telugu, English and mixed speech on Android and iPhone. The conversation
+UI removes enrollment and ignores old voiceprints. Short answers must be tested
+without a speaker gate. Dedicated acoustic voice isolation is not yet integrated.
 
 Additional manual cases: interrupt a long reply; make a brief non-speech sound;
 lock/unlock the phone; switch tabs; revoke mic permission; leave idle camera

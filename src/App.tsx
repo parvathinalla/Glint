@@ -35,7 +35,7 @@ import { canReport, type Feedback, type View } from "../shared/model.ts";
 import { Organizer, Spark } from "./Art.tsx";
 import { asDataUrl, useCamera } from "./camera.ts";
 import { CompanionHome } from "./CompanionHome.tsx";
-import { loadKeyGateDismissed, saveKeyGateDismissed } from "./key-gate.ts";
+import { saveKeyGateDismissed } from "./key-gate.ts";
 import Opening from "./Opening.tsx";
 
 type Message = {
@@ -84,8 +84,6 @@ export default function App() {
   const camera = useCamera(onProblem);
   const [page, setPage] = useState<"home" | "work">("home");
   const [modal, setModal] = useState<"key" | "source" | "about" | null>(null);
-  const [revealed, setRevealed] = useState(false);
-  const gateChecked = useRef(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [conversation, setConversation] = useState(0);
   const [model, setModel] = useState("");
@@ -171,12 +169,6 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    if (gateChecked.current || !revealed || !view) return;
-    gateChecked.current = true;
-    if (!view.key.connected && !loadKeyGateDismissed() && modal === null)
-      setModal("key");
-  }, [revealed, view, modal]);
-  useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -257,18 +249,6 @@ export default function App() {
       stopSpeech();
   }, [now, feedback, speaking, stopSpeech]);
 
-  async function demo() {
-    camera.stop();
-    stopSpeech();
-    request.current?.abort();
-    const v = await update("demo", {});
-    if (v) {
-      setPage("work");
-      setMode("replay");
-      setMessages([]);
-      setFeedback(null);
-    }
-  }
   async function changePhase(
     phase: "active" | "paused" | "ready",
     withCamera = false,
@@ -394,10 +374,10 @@ export default function App() {
   const fresh = feedback && now + clockOffset.current < feedback.expiresAt;
 
   return (
-    <Opening onReveal={() => setRevealed(true)}>
+    <Opening>
     <div className="app-shell">
       <main tabIndex={-1}>
-        <header className="topbar">
+        {page !== "home" && <header className="topbar">
           <button
             className="brand"
             onClick={() => {
@@ -463,7 +443,7 @@ export default function App() {
               {keyLive && <span className="key-dot" />}
             </button>
           </div>
-        </header>
+        </header>}
         <div className="main-content">
           {problem && (
             <div className="notice error" role="alert">
@@ -494,7 +474,7 @@ export default function App() {
               onView={setView}
               linkOpen={linkOpen}
               closeLink={() => setLinkOpen(false)}
-              example={() => void demo()}
+              openLink={() => setLinkOpen(true)}
             />
           )}
           {view && task && page === "work" && (

@@ -1,0 +1,96 @@
+:root { color-scheme: light; --ui-bg:#f5f7fc; --ui-surface:#fff; --ui-raised:#eef3fb; --ui-text:#14203a; --ui-muted:#56647c; --ui-line:#dce4f0; --ui-blue:#0756d5; --ui-soft:#eaf2ff; }
+.opening-character-button { background:none; border:0; padding:0; cursor:pointer; }
+:root[data-theme="dark"] { color-scheme:dark; --ui-bg:#0d131e; --ui-surface:#151e2d; --ui-raised:#1b283b; --ui-text:#edf4ff; --ui-muted:#a3b2ca; --ui-line:#2c3a50; --ui-blue:#61b7ff; --ui-soft:#142d4c; }
+body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var(--ui-text); }
+.app-shell:has(.glint-ui) { max-width:none; padding:0; }
+.app-shell:has(.glint-ui)>main { padding:0; }
+.app-shell:has(.glint-ui) .main-content { padding:0; max-width:none; margin:0; }
+.glint-ui { max-width:1100px; margin:0 auto; padding:0 36px 22px; color:var(--ui-text); min-height:100svh; }
+.glint-ui button { font-weight:500; }
+.glint-ui button:focus-visible, .glint-sheet button:focus-visible { outline:3px solid var(--ui-blue); outline-offset:4px; }
+.glint-header { display:flex; align-items:center; justify-content:space-between; height:92px; border-bottom:1px solid var(--ui-line); }
+.glint-brand { display:flex; align-items:center; gap:8px; color:var(--ui-text); background:none; padding:0; font-size:26px; font-weight:750!important; letter-spacing:-1px; }
+.glint-brand .spark { width:42px; height:46px; margin:0; }
+.glint-header-actions { display:flex; align-items:center; gap:18px; }
+.glint-end { background:none; color:#b64259; font-size:13px; padding:10px; }
+:root[data-theme="dark"] .glint-end { color:#ffabb8; }
+.glint-round { border:1px solid var(--ui-line); display:inline-flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:50%; background:var(--ui-surface); color:var(--ui-text); flex-shrink:0; }
+.glint-workspace { max-width:800px; margin:0 auto; }
+.glint-presence { position:relative; }
+.glint-star-scene { height:clamp(260px,36vh,410px); position:relative; display:grid; place-items:center; }
+.glint-star-scene>.spark { position:relative; z-index:1; width:220px; height:250px; margin:0; filter:drop-shadow(0 25px 24px #1676ff28); animation:glint-float 4s ease-in-out infinite; }
+.glint-star-orbit { position:absolute; width:310px; height:310px; max-width:82%; border:1px solid #2998ff26; border-radius:50%; background:radial-gradient(ellipse,#1f8fff16,transparent 70%); }
+.glint-star-orbit:after { content:""; position:absolute; inset:25px; border:1px solid #2998ff12; border-radius:50%; }
+.glint-sparkle { position:absolute; color:#2684ff; font-size:25px; }
+.sparkle-one { top:29%; left:calc(50% - 125px); }.sparkle-two { right:calc(50% - 125px); bottom:25%; }
+.glint-guidance { text-align:center; max-width:660px; margin:0 auto; }
+.glint-guidance h1, .glint-ended h1 { font-size:clamp(28px,4vw,42px); line-height:1.18; letter-spacing:-1.5px; font-weight:680; color:var(--ui-text); margin:14px auto; }
+.glint-supporting { font-size:15px; line-height:1.6; color:var(--ui-muted); max-width:430px; margin:0 auto; }
+.glint-eyebrow { color:var(--ui-muted); font-size:10px; font-weight:650; letter-spacing:1.8px; line-height:1.6; }
+.glint-primary { display:inline-flex; justify-content:center; align-items:center; gap:12px; border:0; border-radius:15px; min-height:48px; padding:13px 24px; background:linear-gradient(110deg,#0759db,#086cda); color:white; font-weight:600!important; box-shadow:0 7px 18px #0866ff20; }
+.glint-guidance>.glint-primary { display:flex; margin:25px auto 14px; min-width:240px; }
+.glint-next { transform:rotate(90deg); }
+.glint-privacy { display:block; color:var(--ui-muted); font-size:11px; margin:12px auto; }
+.glint-status { display:inline-flex; gap:7px; align-items:center; background:var(--ui-raised); color:var(--ui-muted); border-radius:30px; padding:6px 12px; font-size:12px; }
+.glint-status i { height:6px; width:6px; border-radius:50%; background:var(--ui-muted); }.glint-status.is-active { color:var(--ui-blue); background:var(--ui-soft); }.glint-status.is-active i { background:var(--ui-blue); }
+.glint-session-dock { max-width:420px; margin:32px auto 16px; }
+.glint-controls { display:flex; align-items:center; justify-content:center; gap:32px; position:relative; }
+.glint-control { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; background:none; color:var(--ui-muted); font-size:11px; position:relative; min-width:74px; min-height:68px; }
+.glint-control>svg { width:45px; height:45px; padding:11px; border:1px solid var(--ui-line); border-radius:50%; color:var(--ui-text); background:var(--ui-surface); }
+.glint-mic { display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--ui-blue); background:none; font-size:11px; padding:0; }
+.glint-mic>svg { padding:20px; width:74px; height:74px; color:white; background:linear-gradient(145deg,#21bbff,#0866ff 70%); border-radius:50%; box-shadow:0 0 0 7px #148bff0c,0 10px 25px #0a76ff25; }
+.glint-mic.is-listening>svg { box-shadow:0 0 0 8px #148bff1a,0 0 0 14px #148bff0a; }
+.glint-unread { position:absolute; width:5px; height:5px; background:var(--ui-blue); border-radius:50%; top:8px; right:22px; }
+.glint-quick-compose { margin:22px 0 0; }.glint-quick-compose>button { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%; padding:12px 16px; color:var(--ui-muted); background:var(--ui-surface); border:1px solid var(--ui-line); border-radius:30px; font-size:13px; }
+.glint-attribution { display:flex; align-items:center; justify-content:center; gap:6px; font-size:10px; color:var(--ui-muted); padding-top:20px; }.glint-attribution span { margin-left:20px; letter-spacing:1px; }
+.glint-ui .glint-camera { width:100%; max-width:800px; border-radius:25px; padding:0; margin:24px auto; background:#111; aspect-ratio:16/9; }
+.glint-ui .glint-camera video { width:100%; height:100%; max-height:none; object-fit:cover; margin:0; }
+.glint-camera-status { position:absolute; top:15px; left:15px; color:#13213b; background:#ffffffeb; border-radius:30px; padding:8px 12px; font-size:11px; display:flex; align-items:center; gap:6px; }.glint-camera-status i { width:6px; height:6px; border-radius:50%; background:#16816d; }
+.glint-camera-actions { position:absolute; top:12px; right:12px; display:flex; gap:7px; }.glint-camera-actions .glint-round { background:#ffffffeb; color:#14203a; border:0; width:36px; height:36px; }
+.glint-ui .glint-camera.is-fullscreen { position:fixed; inset:0; z-index:70; border-radius:0; margin:0; max-width:none; width:100%; height:100%; aspect-ratio:auto; }
+.glint-ui .glint-camera.is-fullscreen video { object-fit:contain; }
+.glint-fullscreen-controls { position:absolute; bottom:max(20px,env(safe-area-inset-bottom)); left:0; right:0; }.glint-fullscreen-controls .glint-controls { width:max-content; max-width:95%; padding:14px 20px; background:#0c1529e8; border:1px solid #33435c; border-radius:30px; margin:auto; }
+.glint-fullscreen-controls .glint-control { color:white; }.glint-fullscreen-controls .glint-control>svg { background:#263449; color:white; border-color:#3a4b65; }
+.glint-ui.has-camera .glint-guidance h1 { font-size:clamp(23px,3vw,30px); line-height:1.3; }
+.glint-live-transcript { font-size:14px; color:var(--ui-muted); padding:13px; max-width:500px; margin:12px auto; line-height:1.5; }
+.glint-interrupt { background:var(--ui-raised); color:var(--ui-text); border:1px solid var(--ui-line); border-radius:30px; padding:10px 17px; display:inline-flex; align-items:center; gap:8px; margin:15px auto 0; font-size:12px; }
+.glint-interrupt svg { color:#c64d62; }
+.glint-text { color:var(--ui-blue); background:none; display:inline-flex; align-items:center; gap:6px; padding:10px 5px; font-size:13px; }
+.glint-audio-note { display:block; margin:8px auto; font-size:11px; }
+.glint-sheet { padding:0; width:min(560px,95vw); max-height:90svh; border:1px solid var(--ui-line); border-radius:25px; color:var(--ui-text); background:var(--ui-surface); box-shadow:0 25px 100px #0005; }
+.glint-sheet::backdrop { background:#07162d60; backdrop-filter:blur(6px); }
+.glint-sheet h2 { display:flex; align-items:center; gap:9px; color:var(--ui-text); font-size:20px; letter-spacing:-.5px; }
+.glint-sheet-header { padding:22px 24px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--ui-line); gap:12px; }
+.glint-sheet-handle { width:38px; height:4px; border-radius:9px; background:var(--ui-line); margin:9px auto -8px; }
+.glint-conversation[open] { display:flex; flex-direction:column; height:min(780px,90svh); }
+.glint-sheet .glint-messages { flex:1; max-height:none; min-height:0; overflow-y:auto; padding:22px; }
+.glint-sheet .companion-message { padding:12px 14px; border:0; margin:0 0 18px; border-radius:17px; background:var(--ui-raised); color:var(--ui-text); max-width:92%; font-size:14px; line-height:1.65; }
+.glint-sheet .companion-message.from-you { margin-left:auto; background:var(--ui-soft); color:var(--ui-text); }
+.glint-sheet .companion-message>span { font-size:10px; display:flex; gap:5px; align-items:center; color:var(--ui-muted); margin-bottom:4px; }
+.glint-sheet .companion-message small { color:var(--ui-muted); font-size:11px; }.glint-sheet a { color:var(--ui-blue); }
+.glint-sheet .message-composer { display:block; padding:16px 22px max(12px,env(safe-area-inset-bottom)); background:var(--ui-surface); border-top:1px solid var(--ui-line); margin:0; }
+.glint-sheet .glint-composer { display:flex; width:100%; max-width:none; margin:0; align-items:center; border:1px solid var(--ui-line); border-radius:30px; background:var(--ui-bg); padding:5px; gap:8px; }
+.glint-sheet .glint-composer input { border:0; background:transparent; border-radius:24px; color:var(--ui-text); font-size:13px; padding:10px; min-width:0; box-shadow:none; }
+.glint-sheet .glint-composer input::placeholder { color:var(--ui-muted)!important; }
+.glint-send { background:#0866ff; border-radius:50%; width:38px; height:38px; flex-shrink:0; color:white; display:grid; place-items:center; }
+.glint-chat-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; }.glint-chat-actions .glint-text { font-size:11px; }
+.glint-chat-empty { text-align:center; padding:40px 15px; color:var(--ui-muted); }.glint-chat-empty .spark { width:70px; height:80px; margin:auto; }.glint-chat-empty h3 { font-size:20px; color:var(--ui-text); margin:12px; }.glint-chat-empty p { line-height:1.6; font-size:14px; }
+.glint-tracking-card { border:1px solid #3896ff55; background:var(--ui-soft); padding:20px; border-radius:18px; margin:14px 0; }.glint-tracking-card h3 { font-size:19px; margin:6px 0; }.glint-tracking-card p { font-size:13px; line-height:1.6; }.glint-tracking-card small { display:block; margin:10px 0; color:var(--ui-muted); font-size:10px; }.glint-card-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }.glint-card-actions .glint-primary { font-size:12px; padding:10px 14px; }
+.glint-evidence { margin:12px 0 0; padding:13px; border:1px solid var(--ui-line); border-radius:13px; background:var(--ui-surface); display:flex; flex-direction:column; gap:5px; }.glint-evidence>span { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--ui-muted); }.glint-evidence strong { font-size:18px; text-transform:capitalize; }.glint-evidence>div { display:flex; gap:15px; }
+.glint-wait { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--ui-muted); }
+.glint-settings-body { padding:24px; }.glint-settings-body>h3 { font-size:17px; margin:6px 0 17px; }.glint-theme-switch { display:flex; gap:8px; margin:0 0 22px; }.glint-theme-switch>button { display:flex; flex:1; gap:8px; flex-direction:column; align-items:center; padding:14px; border-radius:13px; border:1px solid var(--ui-line); color:var(--ui-muted); background:var(--ui-bg); font-size:12px; }.glint-theme-switch>button[aria-pressed="true"] { color:var(--ui-blue); background:var(--ui-soft); border-color:var(--ui-blue); }
+.glint-setting-row { display:flex; align-items:center; justify-content:space-between; gap:15px; padding:17px 0; border-bottom:1px solid var(--ui-line); font-size:14px; }.glint-setting-row>span { display:flex; gap:12px; align-items:center; }.glint-setting-row input[type="checkbox"] { width:20px; height:20px; flex-shrink:0; accent-color:#0866ff; cursor:pointer; padding:0; }.glint-setting-row small, .glint-setting-link small { display:block; color:var(--ui-muted); font-size:11px; margin-top:4px; font-weight:400; }
+.glint-setting-note { color:var(--ui-muted); line-height:1.6; font-size:11px; margin:15px 0 24px; }.glint-setting-link { width:100%; display:flex; align-items:center; justify-content:space-between; background:var(--ui-bg); border:1px solid var(--ui-line); border-radius:13px; padding:15px; text-align:left; color:var(--ui-text); margin:8px 0; font-size:14px; }
+.glint-advanced { margin:18px 0 0; padding:14px 0; border:0; border-top:1px solid var(--ui-line); font-size:13px; }.glint-advanced summary { cursor:pointer; font-weight:500; }.glint-advanced p { line-height:1.7; color:var(--ui-muted); font-size:12px; padding:12px 0; }.glint-advanced small { font-size:10px; color:var(--ui-muted); }
+.glint-clip video { width:100%; max-height:65vh; background:#080e16; }.glint-clip>p { padding:18px; text-transform:capitalize; }
+.glint-ended { display:flex; align-items:center; justify-content:center; flex-direction:column; min-height:70vh; gap:15px; }.glint-ended>.spark { width:170px; height:190px; }.glint-ended>p { color:var(--ui-muted); }.glint-ended>.glint-primary { margin-top:15px; }
+.modal { background:var(--ui-surface); color:var(--ui-text); border-color:var(--ui-line); }.modal h2 { color:var(--ui-text); }.modal :is(input,select,textarea) { background:var(--ui-bg); color:var(--ui-text); border-color:var(--ui-line); }
+@keyframes glint-float { 0%,100% { transform:translateY(0) rotate(-3deg); } 50% { transform:translateY(-9px) rotate(3deg); } }
+@media (min-width:1000px) { .glint-conversation { margin-right:5vw; }.glint-ui.has-camera .glint-session-dock { margin-top:22px; } }
+@media (max-width:600px) {
+  .glint-ui { padding:0 20px 18px; }.glint-header { height:74px; }.glint-brand { font-size:23px; }.glint-header-actions { gap:8px; }.glint-end { font-size:11px; }.glint-header .glint-round { border:0; background:transparent; }
+  .glint-star-scene { height:clamp(230px,35svh,340px); }.glint-star-scene>.spark { width:190px; height:220px; }.glint-star-orbit { width:270px; height:270px; }.glint-guidance h1 { font-size:32px; }.glint-supporting { font-size:13px; max-width:290px; }.glint-session-dock { margin-top:30px; }.glint-attribution { font-size:9px; }.glint-attribution span { margin-left:10px; letter-spacing:0; }
+  .glint-ui .glint-camera { aspect-ratio:auto; height:clamp(220px,43svh,400px); margin:16px 0 20px; border-radius:24px; }.glint-camera-status { top:10px; left:10px; font-size:9px; padding:8px; }.glint-camera-actions { top:8px; right:8px; gap:5px; }.glint-camera-actions .glint-round { width:31px; height:31px; }.glint-ui.has-camera .glint-guidance h1 { font-size:23px; text-align:left; letter-spacing:-.7px; }.has-camera .glint-guidance { text-align:left; }.has-camera .glint-supporting { margin:0; }.has-camera .glint-session-dock { margin-top:24px; }
+  .glint-sheet { width:100%; max-width:100%; max-height:94svh; margin:auto 0 0; border-radius:25px 25px 0 0; }.glint-conversation[open] { height:85svh; }.glint-sheet-header { padding:20px; }.glint-sheet .glint-messages { padding:18px; }.glint-sheet .message-composer { padding:12px 16px max(12px,env(safe-area-inset-bottom)); }.glint-settings { max-height:90svh; }.glint-settings-body { padding:20px; }
+}
+@media (prefers-reduced-motion:reduce) { .glint-star-scene>.spark { animation:none; } }

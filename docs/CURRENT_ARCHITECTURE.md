@@ -15,7 +15,7 @@ Source review: 31 October 2026. This documents the local implementation, rather 
 | Local person / hand-rise events | MediaPipe Pose Landmarker in a Web Worker | `src/visual-awareness.ts`, `public/vision-observer.js`, `shared/visual-events.ts` |
 | Optional recorded object movement | SAM 3.1, official Meta SAM parser, normalized per-frame box centers; experimental two-second clips | `server/sam-provider.ts`, `shared/object-motion.ts`, `docs/OBJECT_TRACKING.md` |
 | Speech capture and turn detection | Web Audio, AudioWorklet, Silero VAD using ONNX Runtime Web/WASM, energy detection | `src/microphone.ts`, `src/ml-vad.ts`, `public/voice-capture.js`, `shared/voice-turn.ts` |
-| Optional speaker check | WeSpeaker ResNet34-LM, ONNX Runtime Web/WASM, locally enrolled voiceprint | `src/speaker-id.ts` |
+| Legacy speaker-check research (not active in companion UI) | WeSpeaker modules/tests retained; enrollment and gating removed from the conversation UI | `src/speaker-id.ts`, `docs/VOICE_FILTERING.md` |
 | Streaming speech recognition | Browser WebSocket to local server; server `ws` adapter to Meta Muse Voice Transcribe `/asr/realtime` | `src/voice-stream.ts`, `server/asr-provider.ts`, `server/app.ts` |
 | Utterance fallback recognition | Bounded WAV upload to Meta `/asr/transcribe` | `server/agent-provider.ts` |
 | Conversation and camera understanding | Muse Spark through Meta `/responses`; text deltas streamed when applicable | `server/agent-provider.ts`, `server/engine.ts` |

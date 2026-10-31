@@ -1,3 +1,4 @@
+import { setSpokenReplies, typeMessage, openCameraFullscreen } from "./ui-helpers";
 import { test, expect } from "./fixture";
 test.use({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
 
@@ -40,12 +41,12 @@ test("phone camera can flip and keeps the recognized words visible in fullscreen
     await route.fulfill({ json: { message: "Ready.", sources: [], searched: false, epoch: body.epoch } });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Mute spoken replies" }).click();
+  await setSpokenReplies(page,false);
   // A recognized question remains visible over the fullscreen camera.
-  await page.getByRole("textbox", { name: "Message Glint" }).fill("Where is the cup?");
+  await typeMessage(page,"Where is the cup?");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page.getByText("Ready.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await openCameraFullscreen(page);
   await expect(page.locator(".camera-transcript")).toHaveText("You: Where is the cup?");
   await page.getByRole("button", { name: "Switch to front camera" }).click();
   await expect(page.getByRole("button", { name: "Switch to back camera" })).toBeVisible();

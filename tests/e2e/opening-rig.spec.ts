@@ -86,7 +86,7 @@ for (const [name, width, height] of [
     await page.clock.runFor(1500);
     await expect(page.getByTestId("opening")).toHaveCount(0);
     await expect(
-      page.getByLabel("Message Glint"),
+      page.getByRole("button", { name: "Open conversation", exact:true }),
     ).toBeVisible();
   });
 }

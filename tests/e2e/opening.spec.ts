@@ -15,6 +15,7 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
   const page = await context.newPage();
   await context.addInitScript(() => {
     localStorage.setItem("glint-key-gate", "1");
+    sessionStorage.setItem("glint-started","1");
   });
   await page.clock.install({ time: new Date("2026-10-28T12:00:00Z") });
   await page.clock.pauseAt(new Date("2026-10-28T12:00:01Z"));
@@ -41,7 +42,7 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
     const intro = page.getByTestId("opening");
     await expect(intro).toHaveAttribute("data-phase", "walking");
     await expect(
-      page.getByLabel("Message Glint"),
+      page.getByRole("button", { name: "Open conversation", exact: true }),
     ).not.toBeVisible();
     await expect(page.locator(".site-entrance")).toHaveAttribute("inert", "");
     await expect(page.locator(".opening-profile")).toHaveCSS("opacity", "1");
@@ -85,7 +86,7 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
     await page.clock.runFor(530);
     await expect(intro).toHaveCount(0);
     await expect(
-      page.getByLabel("Message Glint"),
+      page.getByRole("button", { name: "Open conversation", exact: true }),
     ).toBeVisible();
     await expect(page.locator("main")).toBeFocused();
     await page.screenshot({
@@ -98,13 +99,9 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
           (window as unknown as { mediaRequested?: boolean }).mediaRequested,
       ),
     ).toBeUndefined();
-    await page
-      .getByRole("button", { name: "Try desk organizer example" })
-      .click();
+    await page.getByRole("button", { name:"Open conversation",exact:true }).click();
     await expect(intro).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Confirm this exact source" }),
-    ).toBeVisible();
+    await expect(page.getByRole("dialog",{name:"Conversation",exact:true})).toBeVisible();
   } finally {
     const video = page.video();
     await context.close();
@@ -173,7 +170,7 @@ test("mobile opening stays within the viewport and reveals without layout overfl
   await page.clock.runFor(600);
   await expect(page.getByTestId("opening")).toHaveCount(0);
   await expect(
-    page.getByLabel("Message Glint"),
+    page.getByRole("button", { name: "Open conversation", exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -192,12 +189,12 @@ test("reduced motion bypasses the walk and light; keyboard skip releases the sit
   await page.goto("/");
   await expect(page.getByTestId("opening")).toHaveCount(0);
   await expect(
-    page.getByLabel("Message Glint"),
+    page.getByRole("button", { name: "Open conversation", exact: true }),
   ).toBeVisible();
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.reload();
   await expect(page.getByTestId("opening")).toBeVisible();
-  await page.keyboard.press("Tab");
+  await page.getByRole("button", { name: "Skip intro" }).focus();
   await expect(page.getByRole("button", { name: "Skip intro" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("opening")).toHaveCount(0);

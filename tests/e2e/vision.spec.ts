@@ -1,3 +1,4 @@
+import { setSpokenReplies, typeMessage, openCameraFullscreen, closeConversation } from "./ui-helpers";
 import { test, expect } from "./fixture";
 import { readFileSync } from "node:fs";
 test.use({ reducedMotion: "reduce" });
@@ -158,14 +159,14 @@ test("camera observes silently without a question and sends frame history with q
     };
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Mute spoken replies" }).click();
-  await page.getByRole("button", { name: "Open camera", exact: true }).click();
+  await setSpokenReplies(page,false);
+  await openCameraFullscreen(page);
   await page
     .getByRole("button", { name: "Exit full screen camera", exact: true })
     .click();
   await expect.poll(() => observations, { timeout: 15000 }).toBeGreaterThan(0);
   await expect(
-    page.getByText("Seeing: stirring ingredients in a bowl", { exact: true }),
+    page.getByText("stirring ingredients in a bowl", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toHaveCount(0);
   const seenBefore = observations;
@@ -176,7 +177,7 @@ test("camera observes silently without a question and sends frame history with q
   await page.waitForTimeout(1000);
   await expect(page.getByText("Hi! I saw you raise your hand.", { exact: true })).toHaveCount(0);
   await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Message Glint").fill("What am I doing?");
+  await typeMessage(page,"What am I doing?");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(
     page.getByText(
@@ -191,11 +192,10 @@ test("camera observes silently without a question and sends frame history with q
     path: "test-results/glint-visual-awareness-fixture.png",
     fullPage: true,
   });
+  await closeConversation(page);
   await page.getByRole("button", { name: "Stop camera", exact: true }).click();
   const before = observations;
   await page.waitForTimeout(6500);
   expect(observations).toBe(before);
-  await page
-    .getByRole("button", { name: "End voice chat", exact: true })
-    .click();
+  await expect(page.getByRole("button", { name: "Talk to Glint", exact: true })).toBeVisible();
 });

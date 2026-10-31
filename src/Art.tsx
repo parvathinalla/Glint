@@ -14,9 +14,9 @@ export function Spark({
     >
       <defs>
         <radialGradient id={small ? "glow-s" : "glow"}>
-          <stop stopColor="#e2f7ff" />
-          <stop offset=".7" stopColor="#77c7f5" />
-          <stop offset="1" stopColor="#238ddd" />
+          <stop stopColor="#67d5ff" />
+          <stop offset=".7" stopColor="#149cff" />
+          <stop offset="1" stopColor="#0866ff" />
         </radialGradient>
       </defs>
       <ellipse cx="80" cy="160" rx="34" ry="6" fill="#a5c6d8" opacity=".3" />
@@ -25,14 +25,14 @@ export function Spark({
           d="M78 19C90 15 94 39 107 48C117 56 142 58 148 72C155 88 138 98 125 105C115 114 117 137 104 145C93 152 83 139 76 134C67 145 52 143 48 130C44 115 37 109 22 103C7 97 7 80 22 71C42 60 54 58 61 40C65 30 67 20 78 19Z"
           fill={`url(#${small ? "glow-s" : "glow"})`}
         />
-        <ellipse cx="61" cy="84" rx="5" ry="8" fill="#4d432e" />
-        <ellipse cx="94" cy="82" rx="5" ry="8" fill="#4d432e" />
+        <ellipse cx="61" cy="84" rx="5" ry="8" fill="#fff" />
+        <ellipse cx="94" cy="82" rx="5" ry="8" fill="#fff" />
         <circle cx="62" cy="81" r="1.8" fill="#fff" />
         <circle cx="95" cy="79" r="1.8" fill="#fff" />
         <path
           d="M71 99Q79 107 87 98"
           fill="none"
-          stroke="#83613d"
+          stroke="#0756a0"
           strokeWidth="3"
           strokeLinecap="round"
         />

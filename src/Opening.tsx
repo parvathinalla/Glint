@@ -109,9 +109,9 @@ export default function Opening({
           aria-label="Glint welcome animation"
         >
           <div className="opening-light" aria-hidden="true" />
-          <div className="opening-position" aria-hidden="true">
+          <button className="opening-position opening-character-button" aria-label="Continue to Glint" onClick={finish}>
             <OpeningCharacter />
-          </div>
+          </button>
           <button className="opening-skip" onClick={finish}>
             Skip intro
           </button>

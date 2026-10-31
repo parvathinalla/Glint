@@ -11,13 +11,13 @@ import {
   CameraOff,
   SwitchCamera,
   Captions,
+  MessageCircle, Settings2, ChevronLeft, Sun, Moon, Monitor, MicOff, Sparkles, Play, Check,
   Link,
   LoaderCircle,
   Maximize,
   Mic,
   Square,
   Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
 import { asDataUrl, useCamera, encodeCameraFrames } from "./camera.ts";
@@ -39,26 +39,10 @@ import {
   isStreamingVoiceEnabled,
 } from "./voice-stream.ts";
 import { isEchoTranscript } from "./echo.ts";
-import { waitForSpeaker } from "./speaker-gate.ts";
+import { Spark } from "./Art.tsx";
+import { loadAppearance, applyAppearance, type Appearance } from "./appearance.ts";
+import { trackingIntent, identifyTrackingObject } from "../shared/tracking-intent.ts";
 import { VoiceDiagnostics, type VoiceDiagnostic } from "../shared/voice-diagnostics.ts";
-import {
-  SPEAKER_MIN_SECONDS,
-  SpeakerCheckQueue,
-  SpeakerEmbedder,
-  averageVoiceprint,
-  captureEnrollmentSample,
-  clearVoiceprint,
-  cosineSimilarity,
-  isSpeakerLockEnabled,
-  loadVoiceprint,
-  resampleLinear,
-  sampleHasSpeech,
-  saveVoiceprint,
-  verifyScore,
-  wavBytesToMono16k,
-  type SpeakerVerdict,
-  type Voiceprint,
-} from "./speaker-id.ts";
 import {
   loadSubtitlesEnabled,
   saveSubtitlesEnabled,
@@ -88,6 +72,7 @@ type Message = {
   interrupted?: boolean;
   note?: string;
   snapshot?: AgentReply["snapshot"];
+  motion?: ObjectMotion;
 };
 const voiceStreamUrl = () =>
   `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/voice-stream`;
@@ -102,7 +87,7 @@ export function CompanionHome({
   onView,
   linkOpen,
   closeLink,
-  example,
+  openLink,
 }: {
   view: View;
   online: boolean;
@@ -111,7 +96,7 @@ export function CompanionHome({
   connect: () => void;
   linkOpen: boolean;
   closeLink: () => void;
-  example: () => void;
+  openLink: () => void;
   onView: (view: View) => void;
 }) {
   const [problem, setProblem] = useState("");
@@ -134,13 +119,45 @@ export function CompanionHome({
   const [messages, setMessages] = useState<Message[]>([]),
     [question, setQuestion] = useState("");
   const [partial, setPartial] = useState("");
-  const [trackConcept,setTrackConcept]=useState("computer mouse");
+  const [trackConcept,setTrackConcept]=useState("");
   const [tracking,setTracking]=useState<"recording"|"analyzing"|null>(null);
+  const trackingStart = useRef(false);
   const [objectMotion,setObjectMotion]=useState<ObjectMotion|null>(null);
   const [trackProblem,setTrackProblem]=useState("");
+  const [trackingRequested, setTrackingRequested] = useState(false);
+  const [trackingAllowed, setTrackingAllowed] = useState(true);
+  const [lastTrackingClip, setLastTrackingClip] = useState<string | null>(null);
+  const [conversationOpen, setConversationOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ended, setEnded] = useState(false);
+  const [started, setStarted] = useState(() => {
+    try { return sessionStorage.getItem("glint-started") === "1"; } catch { return false; }
+  });
+  const [appearance, setAppearance] = useState<Appearance>(loadAppearance);
+  const settingsDialog = useRef<HTMLDialogElement>(null);
+  const conversationDialog = useRef<HTMLDialogElement>(null);
+  const clipDialog = useRef<HTMLDialogElement>(null);
+  const trackingAllowedRef = useRef(trackingAllowed);
+  trackingAllowedRef.current = trackingAllowed;
+  const trackingPromptRef = useRef({ requested: trackingRequested, concept: trackConcept });
+  trackingPromptRef.current = { requested: trackingRequested, concept: trackConcept };
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => applyAppearance(appearance, media.matches);
+    apply(); media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [appearance]);
+  useEffect(() => {
+    if (settingsOpen) settingsDialog.current?.showModal();
+    else settingsDialog.current?.close();
+  }, [settingsOpen]);
+  useEffect(() => {
+    if (conversationOpen) conversationDialog.current?.showModal();
+    else conversationDialog.current?.close();
+  }, [conversationOpen]);
   const [mlVadNote, setMlVadNote] = useState("");
   const [voiceNote, setVoiceNote] = useState("");
-  const [speakerNote, setSpeakerNote] = useState("");
+
   const [diagnosticsOn, setDiagnosticsOn] = useState(false);
   const [diagnosticEvents, setDiagnosticEvents] = useState<VoiceDiagnostic[]>([]);
   const [diagnosticUpload, setDiagnosticUpload] = useState("");
@@ -161,19 +178,6 @@ export function CompanionHome({
     const end = diagnosticEnds.current.get(turn);
     recordVoice(stage, end === undefined ? {} : { durationMs: Math.round(performance.now() - end) }, turn);
   };
-  const [voiceprint, setVoiceprint] = useState<Voiceprint | null>(() =>
-    isSpeakerLockEnabled() ? loadVoiceprint() : null,
-  );
-  const [enrolling, setEnrolling] = useState<{
-    sample: number;
-    total: number;
-  } | null>(null);
-  const speaker = useRef<SpeakerEmbedder | null>(null),
-    speakerGate = useRef<AbortController | null>(null),
-    speakerChecks = useRef(new SpeakerCheckQueue()),
-    enrollCancel = useRef(false),
-    enrollingRef = useRef(false),
-    speakerNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [subtitle, setSubtitle] = useState("");
   const [subsOn, setSubsOn] = useState(loadSubtitlesEnabled);
@@ -230,108 +234,6 @@ export function CompanionHome({
       voicePlayer.current?.cancel();
     }
   }, []);
-  const noteSpeaker = useCallback((text: string, sticky = false) => {
-    if (speakerNoteTimer.current) {
-      clearTimeout(speakerNoteTimer.current);
-      speakerNoteTimer.current = null;
-    }
-    if (text) console.info(`[glint-voice] speaker lock: ${text}`);
-    setSpeakerNote(text);
-    if (text && !sticky)
-      speakerNoteTimer.current = setTimeout(() => setSpeakerNote(""), 8000);
-  }, []);
-  const ensureSpeaker = () => {
-    if (!speaker.current)
-      speaker.current = new SpeakerEmbedder((reason) => {
-        const detail = String(reason).slice(0, 90);
-        noteSpeaker(
-          `Speaker lock unavailable (${detail}); voice replies are paused. Re-teach your voice or turn off voice lock.`,
-          true,
-        );
-      });
-    return speaker.current;
-  };
-  /**
-   * Start an async owner/stranger check for one turn's audio. Runs beside
-   * live transcription; reply dispatch waits for a verified owner.
-   * Short turns and failures resolve unknown, rather than granting access.
-   */
-  function startSpeakerCheck(audio: Blob, voicedMs: number) {
-    if (!isSpeakerLockEnabled()) return;
-    const enrolled = loadVoiceprint();
-    if (!enrolled) return;
-    if (voicedMs < SPEAKER_MIN_SECONDS * 1000) {
-      // Backchannel ("mm", "yes"): too little voice to verify.
-      // The resolved check keeps FIFO order
-      // aligned for streamed sends.
-      speakerChecks.current.push(audio, Promise.resolve(null));
-      return;
-    }
-    const promise = (async (): Promise<SpeakerVerdict | null> => {
-      try {
-        const bytes = new Uint8Array(await audio.arrayBuffer()),
-          { samples } = wavBytesToMono16k(bytes);
-        const embedding = await ensureSpeaker().embed(samples);
-        if (!embedding) return null;
-        const score = cosineSimilarity(embedding, enrolled.vector),
-          verdict = verifyScore(score);
-        console.info(
-          `[glint-voice] speaker check: ${verdict} (score ${score.toFixed(2)})`,
-        );
-        return verdict;
-      } catch {
-        return null;
-      }
-    })();
-    speakerChecks.current.push(audio, promise);
-  }
-  const ENROLL_SAMPLES = 2,
-    ENROLL_SECONDS = 4,
-    ENROLL_PROMPTS = [
-      "Say: “Hey Glint, this is me.”",
-      "Say: “Remember my voice.”",
-    ];
-  async function enrollVoice() {
-    if (enrollingRef.current) return;
-    enrollingRef.current = true;
-    enrollCancel.current = false;
-    const vectors: Float32Array[] = [];
-    try {
-      const embedder = ensureSpeaker();
-      for (let sample = 0; sample < ENROLL_SAMPLES; sample++) {
-        setEnrolling({ sample: sample + 1, total: ENROLL_SAMPLES });
-        const { samples, sampleRate } =
-          await captureEnrollmentSample(ENROLL_SECONDS);
-        if (enrollCancel.current) return;
-        const wave = resampleLinear(samples, sampleRate, 16000);
-        if (!sampleHasSpeech(wave, 16000)) {
-          noteSpeaker(
-            "We couldn't hear you clearly — move closer and try again.",
-          );
-          return;
-        }
-        const embedding = await embedder.embed(wave);
-        if (enrollCancel.current) return;
-        if (!embedding) {
-          noteSpeaker("Speaker lock unavailable; try again later.", true);
-          return;
-        }
-        vectors.push(embedding);
-      }
-      setVoiceprint(saveVoiceprint(averageVoiceprint(vectors), vectors.length));
-      noteSpeaker("");
-    } catch (error) {
-      noteSpeaker(
-        error instanceof Error &&
-          (error.name === "NotAllowedError" || error.name === "NotFoundError")
-          ? "Microphone blocked — allow access to enroll your voice."
-          : "Enrollment failed; try again.",
-      );
-    } finally {
-      enrollingRef.current = false;
-      setEnrolling(null);
-    }
-  }
   const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
   function holdWakeLock() {
     const request = (
@@ -360,42 +262,9 @@ export function CompanionHome({
     withImage = false,
     voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
   ) {
-    speakerGate.current?.abort();
-    speakerGate.current = null;
-    const speakerCheck = voiceInput
-      ? speakerChecks.current.claim(voiceInput.audio)
-      : null;
-    if (voiceInput && isSpeakerLockEnabled() && loadVoiceprint()) {
-      const gate = new AbortController();
-      const beforeCheck = generation.current;
-      speakerGate.current = gate;
-      noteSpeaker("Checking your voice…", true);
-      recordVoice("speaker-check");
-      let verdict: "owner" | "stranger" | "unknown";
-      try {
-        verdict = await waitForSpeaker(speakerCheck, gate.signal);
-      } catch {
-        recordVoice("turn-rejected", { reason: "canceled" });
-        return;
-      } finally {
-        if (speakerGate.current === gate) speakerGate.current = null;
-      }
-      if (gate.signal.aborted || beforeCheck !== generation.current) return;
-      if (verdict !== "owner") {
-        recordVoice("turn-rejected", { reason: verdict === "stranger" ? "stranger" : "unverified" });
-        speech.current?.resume();
-        voicePlayer.current?.resume();
-        pendingVoice.current = null;
-        noteSpeaker(verdict === "stranger"
-          ? "Ignored — that voice didn't match yours."
-          : "Could not confirm your voice. Please say a longer phrase, re-teach your voice, or turn off voice lock.");
-        return;
-      }
-      noteSpeaker("");
-      recordVoice("turn-accepted", { reason: "owner" });
-    } else if (voiceInput) {
-      recordVoice("turn-accepted", { reason: "lock-off" });
-    }
+    setConversationOpen(true);
+    setEnded(false);
+    if (voiceInput) recordVoice("turn-accepted", { reason: "lock-off" });
     if (lock.current) {
       if (visualJob.current || voiceInput) await interrupt(false);
       else {
@@ -507,6 +376,28 @@ export function CompanionHome({
           return;
         }
       }
+      const intent = !instructionsUrl ? trackingIntent(text) : null;
+      const clarifying = trackingPromptRef.current.requested && !trackingPromptRef.current.concept
+        ? identifyTrackingObject(text) : null;
+      if (intent || clarifying) {
+        setQuestion("");
+        const concept = intent?.concept ?? clarifying ?? "";
+        const prior = objectMotion;
+        const fresh = prior && concept === prior.concept && prior.epoch === current.current.epoch &&
+          Date.now() - prior.to >= 0 && Date.now() - prior.to < 15000;
+        const response = fresh
+          ? `Recorded ${concept} movement: ${prior.direction.replaceAll("-", " ")}, relative to the camera. ${prior.reason}`
+          : concept
+            ? `I need a new clip to check the ${concept}. Keep the camera still, then move it when recording starts.`
+            : "Which object should I check? For example, the mouse, cable, bottle or cup.";
+        setTrackConcept(concept);
+        setTrackingRequested(!fresh);
+        setTrackProblem("");
+        stopSpeech();
+        setMessages(items => [...items, { who: "you", text }, { who: "glint", text: response }].slice(-20) as Message[]);
+        if (aloud.current) { speech.current?.push(response); speech.current?.finish(); }
+        return;
+      }
       stopSpeech();
       let image: string | undefined,
         capturedAt: number | undefined,
@@ -611,6 +502,7 @@ export function CompanionHome({
             epoch !== current.current.epoch
           )
             return;
+          if (!aloud.current) return;
           if (event.type === "audio") {
             if (voiceInput) recordVoice("audio-received", {}, replyTurn);
             voicePlayer.current?.playAudio(event);
@@ -699,13 +591,16 @@ export function CompanionHome({
   sendRef.current = send;
   async function trackObject() {
     if(!current.current.key.connected){connect();return;}
-    if(!camera.active || tracking)return;
+    if(!trackingAllowedRef.current || !camera.active || tracking || trackingStart.current)return;
     const concept=trackConcept.trim();
     if(!concept){setTrackProblem("Name one object to track, such as computer mouse.");return;}
-    await interrupt(false);
-    const controller=new AbortController(),token=generation.current,epoch=current.current.epoch;
+    trackingStart.current=true;
+    const pausing=interrupt(false), token=generation.current;
+    await pausing;
+    if(token!==generation.current || !cameraActive.current || !trackingAllowedRef.current){trackingStart.current=false;return;}
+    const controller=new AbortController(),epoch=current.current.epoch;
     request.current=controller;lock.current=true;visualJob.current=true;
-    setObjectMotion(null);setTrackProblem("");setProblem("");setTracking("recording");
+    setObjectMotion(null);setLastTrackingClip(null);setTrackProblem("");setProblem("");setTracking("recording");
     try {
       const clip=await camera.recordClip(controller.signal);
       if(controller.signal.aborted || token!==generation.current)return;
@@ -713,11 +608,19 @@ export function CompanionHome({
       const result=await api("track",{...clip,concept,epoch,requestId:crypto.randomUUID()},"POST",controller.signal) as ObjectMotion;
       if(controller.signal.aborted || token!==generation.current || result.epoch!==current.current.epoch)return;
       setObjectMotion(result);
+      setLastTrackingClip(clip.clip);
+      setTrackingRequested(false);
+      const resultText = result.direction === "uncertain"
+        ? `I could not confirm the ${concept}'s movement. ${result.reason}`
+        : `Recorded ${concept}: ${result.direction.replaceAll("-", " ")}, relative to the camera. ${result.reason}`;
+      setMessages(items => [...items, { who: "glint", text: resultText, motion: result }].slice(-20) as Message[]);
+      if (aloud.current) { speech.current?.push(resultText); speech.current?.finish(); }
       nextObservation.current=Date.now()+6000;
     } catch(error) {
       if(!controller.signal.aborted && token===generation.current)
         setTrackProblem(error instanceof Error?error.message:"Object tracking failed.");
     } finally {
+      trackingStart.current=false;
       setTracking(null);
       if(request.current===controller){request.current=null;lock.current=false;visualJob.current=false;}
     }
@@ -744,16 +647,13 @@ export function CompanionHome({
         const decision = turns.current.wavReady(audio);
         // Dropped turns send nothing and get no check; the rest verify.
         if (decision === "fallback") {
-          startSpeakerCheck(audio, stats.voicedMs);
           void send("", undefined, camera.active, {
             audio,
             note: "Sent as a voice recording (live transcription unavailable).",
           });
-        } else if (decision === "store")
-          startSpeakerCheck(audio, stats.voicedMs);
+        }
         return;
       }
-      startSpeakerCheck(audio, stats.voicedMs);
       void send("", undefined, camera.active, { audio });
     },
     onProblem,
@@ -852,8 +752,7 @@ export function CompanionHome({
     },
   );
   const cancelWork = useCallback((softSpeech = false) => {
-    speakerGate.current?.abort();
-    speakerGate.current = null;
+    setTracking(null);
     // A soft barge during the post-text audio drain must not abort the
     // stream: echo and dropped bursts resume it, and only a genuine new
     // turn (see send()) supersedes the drain.
@@ -1005,8 +904,6 @@ export function CompanionHome({
   }, [camera.active]);
   useEffect(() => {
     if (!mic.enabled) {
-      speakerGate.current?.abort();
-      speakerGate.current = null;
       voice.current?.dispose();
       voice.current = null;
       streamingMode.current = false;
@@ -1019,8 +916,6 @@ export function CompanionHome({
       }
       releaseWakeLock();
       setMlVadNote("");
-      speakerChecks.current.purge();
-      noteSpeaker("");
       return;
     }
     holdWakeLock();
@@ -1040,7 +935,6 @@ export function CompanionHome({
         recordVoice("turn-rejected", { reason: "empty" });
         // No send runs for empty finals: discard this turn's check so it
         // can never judge a later turn.
-        speakerChecks.current.claim();
         speech.current?.resume();
 
         voicePlayer.current?.resume();
@@ -1102,12 +996,6 @@ export function CompanionHome({
       client.dispose();
     };
   }, [mic.enabled]);
-  useEffect(
-    () => () => {
-      void speaker.current?.dispose();
-    },
-    [],
-  );
   useEffect(() => {
     if (!diagnosticsOn) return;
     let inFlight = false;
@@ -1156,20 +1044,30 @@ export function CompanionHome({
     voicePlayer.current?.unlock();
     if (question.trim()) void send(question.trim(), undefined, camera.active);
   }
-  // Voice state machine, derived so it cannot disagree with the flags.
-  const voiceState = mic.recording
-    ? "listening"
-    : speaking
-      ? "speaking"
-      : busy
-        ? "processing"
-        : "idle";
   const enterFullscreen = () => {
     speech.current?.unlock();
     voicePlayer.current?.unlock();
     setFullscreen(true);
-    if (view.key.connected && !mic.enabled) void mic.start();
-    else if (!view.key.connected) connect();
+
+  };
+  const openCamera = async () => {
+    speech.current?.unlock(); voicePlayer.current?.unlock();
+    setEnded(false); setProblem("");
+    await camera.start();
+  };
+  const toggleMic = () => {
+    if (mic.enabled) { mic.cancel(); return; }
+    speech.current?.unlock(); voicePlayer.current?.unlock();
+    if (!current.current.key.connected) { connect(); return; }
+    setEnded(false);
+    void mic.start();
+  };
+  const endSession = () => {
+    camera.stop(); mic.cancel(); stopSpeech();
+    setTrackingRequested(false); setLastTrackingClip(null); setObjectMotion(null);
+    setConversationOpen(false); setSettingsOpen(false); setFullscreen(false);
+    setEnded(true);
+    void interrupt(true, true);
   };
   useEffect(() => {
     if (!speaking) setSubtitle("");
@@ -1190,427 +1088,138 @@ export function CompanionHome({
       document.body.style.overflow = overflow;
     };
   }, [fullscreen]);
+  const status = !online ? "Connection lost" : tracking === "recording" ? "Recording movement" : tracking === "analyzing" ? "Checking movement" : speaking ? "Speaking" : busy ? "Thinking" : mic.preparing ? "Preparing microphone" : mic.enabled ? "Listening" : "Mic off";
+  const latestAnswer = messages.filter(message => message.who === "glint").at(-1)?.text;
+  const controls = <div className="glint-controls">
+    <button className="glint-control" aria-label={camera.active ? "Stop camera" : "Open camera"} disabled={camera.starting || !online} onClick={() => {
+      if (camera.active) { camera.stop(); setObjectMotion(null); setLastTrackingClip(null); void interrupt(false, true); }
+      else void openCamera();
+    }}>{camera.active ? <CameraOff size={21}/> : <Camera size={21}/>}<span>{camera.starting ? "Opening…" : camera.active ? "Camera off" : "Camera"}</span></button>
+    <button className={`glint-mic ${mic.enabled ? "is-listening" : ""}`} aria-label={mic.preparing ? "Preparing microphone" : mic.enabled ? "End voice chat" : "Talk to Glint"} aria-pressed={mic.enabled} disabled={mic.preparing || !online} onClick={toggleMic}>
+      {mic.enabled ? <Mic size={29}/> : <MicOff size={29}/>}<span>{mic.preparing ? "Preparing" : mic.enabled ? "End voice chat" : "Talk"}</span>
+    </button>
+    <button className="glint-control" aria-label="Open conversation" onClick={() => setConversationOpen(true)}><MessageCircle size={21}/><span>Conversation</span>{messages.length > 0 && <i className="glint-unread"/>}</button>
+  </div>;
+  const composer = <form className="companion-input glint-composer" onSubmit={submit}>
+    <label className="sr-only" htmlFor="companion-question">Message Glint</label>
+    <input id="companion-question" value={question} maxLength={2000} placeholder="Ask anything about your task…" onChange={event => setQuestion(event.target.value)} onFocus={() => { if (speaking) stopSpeech(); }}/>
+    <button className="glint-send" aria-label="Send message" disabled={!question.trim() || busy || !!tracking || !online}><ArrowUp size={22}/></button>
+  </form>;
   return (
-    <section className="companion-home" aria-label="Talk with Glint">
-      <div className="companion-stage">
-        <div className="companion-controls">
-          <button
-            className="icon-button"
-            aria-label={
-              readAloud ? "Mute spoken replies" : "Enable spoken replies"
-            }
-            onClick={() => {
-              if (!readAloud) {
-                speech.current?.unlock();
-                voicePlayer.current?.unlock();
-              }
-              aloud.current = !readAloud;
-              setReadAloud(!readAloud);
-              stopSpeech();
-            }}
-          >
-            {readAloud ? <Volume2 size={19} /> : <VolumeX size={19} />}
-          </button>
+    <section className={`companion-home glint-ui ${camera.active ? "has-camera" : ""}`} aria-label="Talk with Glint">
+      <div className="glint-main-surface" inert={conversationOpen || settingsOpen} aria-hidden={conversationOpen || settingsOpen ? true : undefined}>
+      <header className="glint-header">
+        <button className="glint-brand" aria-label="Glint companion home" onClick={() => { setConversationOpen(false); setSettingsOpen(false); if (camera.active) { camera.stop(); void interrupt(false, true); } }}><Spark small/><span>Glint</span></button>
+        <div className="glint-header-actions">
+          {started && !ended && <button className="glint-end" onClick={endSession}>End session</button>}
+          <button className="glint-round" aria-label="Open settings" onClick={() => setSettingsOpen(true)}><Settings2 size={21}/></button>
         </div>
-        <p className="companion-status" role="status">
-          {voiceState === "listening"
-            ? "Listening…"
-            : voiceState === "speaking"
-              ? "Glint is speaking"
-              : voiceState === "processing"
-                ? researching
-                  ? "Finding and reading instructions…"
-                  : "Glint is thinking…"
-                : mic.enabled
-                  ? "Voice on · listening"
-                  : ""}
-        </p>
-        {mic.enabled && mlVadNote && (
-          <p className="companion-ml-note">{mlVadNote}</p>
-        )}
-        {mic.enabled && voiceNote && (
-          <p
-            className="companion-voice-note"
-            onClick={() => {
-              speech.current?.unlock();
-              voicePlayer.current?.unlock();
-            }}
-          >
-            {voiceNote}
-          </p>
-        )}
-        {speakerNote && (
-          <p className="companion-speaker-note">{speakerNote}</p>
-        )}
-        {!fullscreen && partial && <p className="companion-partial" aria-live="polite">{partial}</p>}
-        {(busy || speaking) && (
-          <button className="text-button" onClick={() => void interrupt(false)}>
-            Interrupt
-          </button>
-        )}
-        <div
-          className={`companion-camera ${camera.active || camera.starting ? "is-active" : ""} ${fullscreen ? "is-fullscreen" : ""}`}
-        >
-          <video
-            ref={camera.video}
-            autoPlay
-            muted
-            playsInline
-            aria-label="Your live camera preview"
-          />
-          {camera.active && (
-            <>
-              <details className="object-tracking">
-                <summary>Track object movement (SAM)</summary>
-                <label>Track one object
-                  <input aria-label="Object to track" value={trackConcept} maxLength={60}
-                    onChange={event=>setTrackConcept(event.target.value)} disabled={!!tracking}/>
-                </label>
-                <button className="button" onClick={()=>void trackObject()} disabled={!!tracking || camera.starting || !online}>
-                  {tracking==="recording"?"Recording — move the object…":tracking==="analyzing"?"SAM is tracking…":"Track 2-second movement"}
-                </button>
-                <small>Hold the camera still. Uses your Meta key; SAM bills at least 50 frames per clip.</small>
-                {trackProblem && <p role="alert">{trackProblem}</p>}
-                {objectMotion && objectMotion.epoch===view.epoch && <p role="status">
-                  Recorded {objectMotion.concept}: {objectMotion.direction.replaceAll("-"," ")}. {objectMotion.reason}
-                </p>}
-                {tracking && <button className="text-button" onClick={()=>void interrupt(false)}>Cancel tracking</button>}
-              </details>
-              <button
-                className="button camera-flip"
-                aria-label={camera.facingMode === "environment" ? "Switch to front camera" : "Switch to back camera"}
-                disabled={camera.starting}
-                onClick={() => {
-                  void interrupt(false, true).then(() => camera.flip()).then(ok => {
-                    if (ok) setFullscreen(true);
-                  });
-                }}
-              ><SwitchCamera size={18} /> Flip camera</button>
-              {fullscreen && (partial || messages.filter(m => m.who === "you").at(-1)?.text) && (
-                <p className="camera-transcript" aria-live="polite">
-                  You: {partial || messages.filter(m => m.who === "you").at(-1)?.text}
-                </p>
-              )}
-              <div className="live-caption">
-                <i /> Camera awareness on
-              </div>
-              <button
-                className="button"
-                disabled={busy || !online}
-                onClick={() =>
-                  void send(
-                    "What can you see in this view? Help me identify what I’m working on; ask if unclear.",
-                    undefined,
-                    true,
-                  )
-                }
-              >
-                <Camera size={16} /> Ask about this view
-              </button>
-              {fullscreen ? (
-                <div className="fullscreen-bar">
-                  <button
-                    className="icon-button"
-                    aria-label={
-                      subsOn ? "Turn subtitles off" : "Turn subtitles on"
-                    }
-                    aria-pressed={subsOn}
-                    onClick={() => {
-                      const next = !subsOn;
-                      setSubsOn(next);
-                      saveSubtitlesEnabled(next);
-                    }}
-                  >
-                    <Captions size={19} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label="Exit full screen camera"
-                    onClick={() => setFullscreen(false)}
-                  >
-                    <X size={19} />
-                  </button>
+      </header>
+      {ended ? <div className="glint-ended">
+        <Spark state="ready"/><p className="glint-eyebrow">UNTIL NEXT TIME</p><h1>Session ended.</h1><p>Your camera and microphone are off.</p>
+        <button className="glint-primary" onClick={() => { setEnded(false); setStarted(true); }}>Start again <ArrowUp className="glint-next" size={18}/></button>
+        {messages.length > 0 && <button className="glint-text" onClick={() => setConversationOpen(true)}>View conversation</button>}
+      </div> : <>
+        <div className="glint-workspace">
+          <div className="glint-presence">
+            <div className={`companion-camera glint-camera ${camera.active || camera.starting ? "is-active" : ""} ${fullscreen ? "is-fullscreen" : ""}`}>
+              <video ref={camera.video} autoPlay muted playsInline aria-label="Your live camera preview"/>
+              {camera.active && <>
+                <div className="glint-camera-status"><i/> Camera on · {mic.enabled ? "Mic on" : "Mic off"}</div>
+                <div className="glint-camera-actions">
+                  <button className="glint-round" aria-label={camera.facingMode === "environment" ? "Switch to front camera" : "Switch to back camera"} onClick={() => { setObjectMotion(null); setLastTrackingClip(null); void interrupt(false, true).then(() => camera.flip()); }}><SwitchCamera size={20}/></button>
+                  <button className="glint-round" aria-label={fullscreen ? "Exit full screen camera" : "View camera full screen"} onClick={() => fullscreen ? setFullscreen(false) : enterFullscreen()}>{fullscreen ? <X size={20}/> : <Maximize size={20}/>}</button>
                 </div>
-              ) : (
-                <button
-                  className="icon-button"
-                  aria-label="View camera full screen"
-                  onClick={enterFullscreen}
-                >
-                  <Maximize size={16} />
-                </button>
-              )}
-              {fullscreen && subsOn && subtitle && (
-                <p className="companion-subtitles" aria-hidden="true">
-                  {subtitle}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-        {camera.active && (
-          <p className="companion-note">
-            {visionPaused
-              ? "Visual awareness paused · reopen the camera to resume"
-              : observing
-                ? "Following what’s happening…"
-                : awareness?.activity
-                  ? `Seeing: ${awareness.activity}`
-                  : "Recent camera frames are analyzed automatically while the camera is on."}
-          </p>
-        )}
-      </div>
-      <div className="companion-chat">
-        <div
-          className="companion-transcript"
-          ref={scroll}
-          role="log"
-          aria-label="Conversation with Glint"
-          aria-live="polite"
-        >
-          {!messages.length && (
-            <p className="conversation-greeting">
-              Hi, I’m Glint. What would you like a hand with?
-            </p>
-          )}
-          {messages.map((message, i) => (
-            <div key={i} className={`companion-message from-${message.who}`}>
-              <span>{message.who === "you" ? "You" : "Glint"}</span>
-              <p>{message.text}</p>
-              {message.streaming && <small>Replying…</small>}
-              {message.interrupted && <small>Reply interrupted</small>}
-              {message.note && <small>{message.note}</small>}
-              {!!message.sources?.length && (
-                <ul className="agent-sources">
-                  {message.sources.map((source) => (
-                    <li key={source.url}>
-                      <a href={source.url} target="_blank" rel="noreferrer">
-                        {source.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                {fullscreen && <>
+                  {(partial || messages.filter(message => message.who === "you").at(-1)?.text) && <p className="camera-transcript">You: {partial || messages.filter(message => message.who === "you").at(-1)?.text}</p>}
+                  {subsOn && subtitle && <p className="companion-subtitles">{subtitle}</p>}
+                  <div className="glint-fullscreen-controls">{controls}</div>
+                </>}
+              </>}
             </div>
-          ))}
-          {busy && (
-            <p className="companion-wait">
-              <LoaderCircle className="spin" size={16} />
-              {researching ? "Researching your link" : "One moment…"}
-            </p>
-          )}
-        </div>
-        {problem && (
-          <div className="notice error" role="alert">
-            <span>{problem}</span>
-            {failed && (
-              <button
-                className="text-button"
-                disabled={busy || !online}
-                onClick={() =>
-                  void send(
-                    failed.text,
-                    failed.url,
-                    failed.withImage && camera.active,
-                  )
-                }
-              >
-                Retry
-              </button>
-            )}
-            <button
-              className="icon-button"
-              aria-label="Dismiss conversation message"
-              onClick={() => setProblem("")}
-            >
-              <X size={16} />
-            </button>
+            {!camera.active && !camera.starting && <div className={`glint-star-scene ${speaking ? "is-speaking" : ""}`}>
+              <div className="glint-star-orbit"/><Spark state={speaking ? "speaking" : busy ? "thinking" : mic.enabled ? "listening" : "ready"}/>
+              <span className="glint-sparkle sparkle-one">✦</span><span className="glint-sparkle sparkle-two">✧</span>
+            </div>}
+            <div className="glint-guidance">
+              {started ? <>
+                <p className={`glint-status ${mic.enabled || speaking || busy ? "is-active" : ""}`} role="status"><i/>{status}</p>
+                <h1>{camera.active ? !conversationOpen && latestAnswer ? latestAnswer.slice(0, 180) + (latestAnswer.length > 180 ? "…" : "") : "Show me what you’re working on." : "What can I help you with?"}</h1>
+                <p className="glint-supporting">{camera.active ? visionPaused ? "Camera analysis paused. Reopen your camera to resume." : observing ? "Checking your recent camera view…" : awareness?.activity ? awareness.activity.slice(0, 120) : "Ask a question about what you see." : mic.enabled ? "Go ahead. I’m listening." : "Talk, type, or show me through your camera."}</p>
+              </> : <><p className="glint-eyebrow">A LITTLE SPARK. A CLEARER NEXT STEP.</p><h1>Show me. Tell me.<br/>Let’s do it.</h1><p className="glint-supporting">A camera-and-voice companion for the things in front of you.</p>
+                <button className="glint-primary" onClick={() => { setStarted(true); try { sessionStorage.setItem("glint-started", "1"); } catch { /* optional */ } }}>Start Glint <ArrowUp className="glint-next" size={19}/></button>
+                <small className="glint-privacy">Your camera and mic start only when you choose.</small>
+              </>}
+              {partial && <p className="glint-live-transcript" aria-live="polite">{partial}</p>}
+              {subsOn && speaking && subtitle && !fullscreen && !conversationOpen && <p className="glint-live-transcript">{subtitle}</p>}
+              {(busy || speaking) && <button className="glint-interrupt" onClick={() => void interrupt(false)}><Square size={13}/> Interrupt</button>}
+              {mic.enabled && voiceNote && <button className="glint-text glint-audio-note" onClick={() => { speech.current?.unlock(); voicePlayer.current?.unlock(); }}>{voiceNote}</button>}
+              {problem && !conversationOpen && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}<button className="glint-round" aria-label="Dismiss conversation message" onClick={() => setProblem("")}><X size={17}/></button></div>}
+            </div>
           </div>
-        )}
-        <div className="message-composer">
-          <form className="companion-input" onSubmit={submit}>
-            <label className="sr-only" htmlFor="companion-question">
-              Message Glint
-            </label>
-            <input
-              id="companion-question"
-              value={question}
-              maxLength={2000}
-              placeholder="Or type a message…"
-              onFocus={() => {
-                if (lock.current || speaking) void interrupt(false);
-              }}
-              onChange={(event) => {
-                stopSpeech();
-                setQuestion(event.target.value);
-              }}
-            />
-            <button
-              aria-label="Send message"
-              className="button primary"
-              disabled={
-                !question.trim() ||
-                busy ||
-                mic.recording ||
-                mic.preparing ||
-                !online
-              }
-            >
-              <ArrowUp size={20} />
-            </button>
-          </form>
-          <div className="composer-actions">
-            <button
-              className={`button primary talk-button ${mic.enabled ? "recording" : ""}`}
-              aria-label={mic.enabled ? "End voice chat" : "Talk to Glint"}
-              aria-pressed={mic.enabled}
-              disabled={mic.preparing || !online}
-              onClick={() => {
-                speech.current?.unlock();
-
-                voicePlayer.current?.unlock();
-                if (!view.key.connected) {
-                  connect();
-                  return;
-                }
-                stopSpeech();
-                if (mic.enabled) void interrupt(true);
-                else void mic.start();
-              }}
-            >
-              {mic.enabled ? <Square size={18} /> : <Mic size={18} />}
-              <span className="talk-label">
-                {mic.enabled
-                  ? "End voice chat"
-                  : mic.preparing
-                    ? "Preparing…"
-                    : "Talk to Glint"}
-              </span>
-            </button>
-            <button
-              className="button camera-button"
-              aria-label={
-                camera.starting
-                  ? "Opening camera…"
-                  : camera.active
-                    ? "Stop camera"
-                    : "Open camera"
-              }
-              disabled={camera.starting}
-              onClick={() => {
-                if (camera.active) {
-                  camera.stop();
-                  void interrupt(false, true);
-                } else {
-                  // Unlock while the tap is still active, before camera
-                  // permission/startup awaits lose mobile user activation.
-                  speech.current?.unlock();
-                  voicePlayer.current?.unlock();
-                  setProblem("");
-                  void camera.start().then((ok) => {
-                    if (ok) enterFullscreen();
-                    else if (view.key.connected && !mic.enabled)
-                      void mic.start();
-                  });
-                }
-              }}
-            >
-              {camera.active ? <CameraOff size={18} /> : <Camera size={18} />}
-              <span className="talk-label">
-                {camera.starting
-                  ? "Opening camera…"
-                  : camera.active
-                    ? "Stop camera"
-                    : "Open camera"}
-              </span>
-            </button>
-          </div>
+          {started && !fullscreen && <div className="glint-session-dock">{controls}<div className="glint-quick-compose"><button onClick={() => setConversationOpen(true)}><MessageCircle size={17}/> Or type a message… <ArrowUp size={17}/></button></div></div>}
         </div>
-        <p className="companion-note">
-          Voice listens until you end the chat. Glint replies aloud as the
-          answer arrives.
-        </p>
-        <div className="voice-lock-row">
-          {enrolling ? (
-            <p role="status">
-              Recording sample {enrolling.sample} of {enrolling.total}…{" "}
-              {ENROLL_PROMPTS[enrolling.sample - 1]}{" "}
-              <button
-                className="text-button"
-                // The progress clears when the flow actually exits (below),
-                // so a re-tap can never interleave two enrollments.
-                onClick={() => {
-                  enrollCancel.current = true;
-                }}
-              >
-                Cancel
-              </button>
-            </p>
-          ) : voiceprint ? (
-            <p>
-              Voice lock: On · checks your voice before replying{" "}
-              <button
-                className="text-button"
-                onClick={() => void enrollVoice()}
-              >
-                Re-teach
-              </button>{" "}
-              <button
-                className="text-button"
-                onClick={() => {
-                  clearVoiceprint();
-                  setVoiceprint(null);
-                }}
-              >
-                Turn off
-              </button>
-            </p>
-          ) : (
-            <p>
-              Voice lock: Off · background voices may trigger replies ·{" "}
-              <button
-                className="text-button"
-                onClick={() => void enrollVoice()}
-              >
-                Teach Glint your voice
-              </button>
-            </p>
-          )}
-        </div>
-        <details className="voice-diagnostics">
-          <summary>Voice test diagnostics</summary>
-          <p>Optional test recording: event names and timings only. No speech text, audio, voiceprints, images, or keys. Up to 120 events stay in this page; shared events appear in server logs.</p>
-          <label>
-            <input type="checkbox" checked={diagnosticsOn} onChange={event => {
-              const enabled = event.target.checked;
-              if (enabled) { diagnostics.current.start(); setDiagnosticEvents([]); }
-              else diagnostics.current.stop();
-              setDiagnosticUpload("");
-              setDiagnosticsOn(enabled);
-            }}/>{" "}Record and share voice diagnostics
-          </label>
-          {diagnosticUpload && <p role="status">{diagnosticUpload}</p>}
-          {diagnosticEvents.length > 0 && <>
-            <button className="text-button" onClick={() => {
-              const blob = new Blob([JSON.stringify({ version: 1, events: diagnostics.current.snapshot() }, null, 2)], { type: "application/json" });
-              const url = URL.createObjectURL(blob), link = document.createElement("a");
-              link.href = url; link.download = "glint-voice-diagnostics.json"; link.click();
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }}>Download voice diagnostics</button>
-            <ol>{diagnosticEvents.slice(-8).map((event, i) => <li key={i}>
-              Turn {event.turn}: {event.stage.replaceAll("-", " ")}{event.reason ? ` (${event.reason.replaceAll("-", " ")})` : ""}{event.durationMs === undefined ? "" : ` · ${(event.durationMs / 1000).toFixed(2)}s`}
-            </li>)}</ol>
-          </>}
-          <small>Audio scheduled means the browser accepted playback; it does not prove sound was heard.</small>
-        </details>
-        <button
-          className="text-button companion-example"
-          aria-label="Try desk organizer example"
-          onClick={example}
-        >
-          Try the illustrated example <span>· no API key needed</span>
-        </button>
+        <footer className="glint-attribution"><Sparkles size={13}/> Built with Meta models <span>See · Understand · Guide</span></footer>
+      </>}
       </div>
+      <dialog ref={conversationDialog} className="glint-sheet glint-conversation" aria-label="Conversation" onCancel={() => setConversationOpen(false)}>
+        <div className="glint-sheet-handle"/>
+        <header className="glint-sheet-header"><div><p className="glint-eyebrow">YOUR CURRENT SESSION</p><h2><MessageCircle size={21}/> Conversation</h2></div><button className="glint-round" aria-label="Close conversation" onClick={() => setConversationOpen(false)}><X size={21}/></button></header>
+        <div className="companion-transcript glint-messages" ref={scroll} role="log" aria-label="Conversation with Glint" aria-live="polite">
+          {!messages.length && <div className="glint-chat-empty"><Spark small/><h3>What’s in front of you?</h3><p>Ask a question, show your workspace, or share a public instructions link in settings.</p></div>}
+          {messages.map((message, index) => <article key={index} className={`companion-message from-${message.who}`}>
+            <span>{message.who === "you" ? "You" : <><Sparkles size={13}/> Glint</>}</span><p>{message.text}</p>
+            {message.streaming && <small>Replying…</small>}{message.interrupted && <small>Reply interrupted</small>}{message.note && <small>{message.note}</small>}
+            {message.motion && <div className="glint-evidence"><span><Check size={15}/> Recorded clip · SAM 3.1</span><strong>{message.motion.direction.replaceAll("-", " ")}</strong><small>Relative to the camera · not continuous tracking</small>
+              <div>{lastTrackingClip && message.motion === objectMotion && <button className="glint-text" onClick={() => clipDialog.current?.showModal()}><Play size={15}/> View clip</button>}
+              {!ended && <button className="glint-text" onClick={() => { setTrackConcept(message.motion!.concept); setTrackingRequested(true); }}>Check again</button>}</div>
+            </div>}
+            {!!message.sources?.length && <ul className="agent-sources">{message.sources.map(source => <li key={source.url}><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a></li>)}</ul>}
+          </article>)}
+          {trackingRequested && trackConcept && !ended && <div className="glint-tracking-card" role="region" aria-label="Movement check">
+            <p className="glint-eyebrow">CHECK THE {trackConcept.toUpperCase()}</p><h3>{tracking === "recording" ? "Move it now · recording 2s" : tracking === "analyzing" ? "Analyzing the recorded movement…" : "Ready when you are."}</h3>
+            <p>{!trackingAllowed ? "Object analysis is off. Enable it to check this movement." : camera.active ? "Hold the camera still. Move the object after recording starts." : "Open your camera first. Recording starts only when you’re ready."}</p>
+            <small>SAM 3.1 · experimental · minimum 50 frames billed per clip</small>
+            {trackProblem && <p role="alert">{trackProblem}</p>}
+            {tracking ? <><LoaderCircle className="spin" size={20}/><button className="glint-text" onClick={() => void interrupt(false)}>Cancel check</button></> : <div className="glint-card-actions">
+              <button className="glint-primary" disabled={!online} onClick={() => { if (!trackingAllowed) setTrackingAllowed(true); else if (!camera.active) void openCamera(); else void trackObject(); }}>{!trackingAllowed ? "Enable object analysis" : !camera.active ? "Open camera" : trackProblem ? "Retry movement check" : "Ready — check movement"}</button>
+              <button className="glint-text" onClick={() => { setTrackingRequested(false); setTrackProblem(""); }}>Not now</button>
+            </div>}
+          </div>}
+          {busy && <p className="glint-wait"><LoaderCircle className="spin" size={17}/>{researching ? "Reading your instructions…" : "Thinking…"}</p>}
+        </div>
+        {problem && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}</div>}
+        {!ended && <div className="message-composer">{composer}<div className="glint-chat-actions"><button className="glint-text" aria-label={mic.enabled ? "End voice chat" : "Talk to Glint"} onClick={toggleMic}>{mic.enabled ? <Mic size={17}/> : <MicOff size={17}/>} {mic.enabled ? "End voice chat" : "Talk to Glint"}</button><button className="glint-text" onClick={() => { setConversationOpen(false); if (!camera.active) void openCamera(); }}>{camera.active ? "Back to camera" : "Open camera"}</button>{speaking && <button className="glint-text" onClick={() => void interrupt(false)}>Interrupt</button>}</div></div>}
+      </dialog>
+      <dialog ref={settingsDialog} className="glint-sheet glint-settings" aria-label="Settings" onCancel={() => setSettingsOpen(false)}>
+        <header className="glint-sheet-header"><h2><Settings2 size={22}/> Settings</h2><button className="glint-round" aria-label="Close settings" onClick={() => setSettingsOpen(false)}><X size={21}/></button></header>
+        <div className="glint-settings-body">
+          <p className="glint-eyebrow">MAKE IT YOURS</p><h3>Appearance</h3>
+          <div className="glint-theme-switch" role="group" aria-label="Appearance">{([['system', Monitor], ['light', Sun], ['dark', Moon]] as const).map(([value, Icon]) => <button key={value} aria-pressed={appearance === value} onClick={() => setAppearance(value)}><Icon size={20}/>{value[0].toUpperCase() + value.slice(1)}</button>)}</div>
+          <label className="glint-setting-row"><span><Volume2 size={20}/><span>Spoken replies<small>Hear Glint’s answers</small></span></span><input type="checkbox" checked={readAloud} onChange={event => { if (event.target.checked) { speech.current?.unlock(); voicePlayer.current?.unlock(); } aloud.current = event.target.checked; setReadAloud(event.target.checked); stopSpeech(); }}/></label>
+          <label className="glint-setting-row"><span><Captions size={20}/><span>Captions<small>Show spoken replies on screen</small></span></span><input type="checkbox" checked={subsOn} onChange={event => { setSubsOn(event.target.checked); saveSubtitlesEnabled(event.target.checked); }}/></label>
+          <div className="glint-setting-row"><span><MessageCircle size={20}/><span>Speech language<small>Automatic · English and Telugu</small></span></span></div>
+          <label className="glint-setting-row"><span><Camera size={20}/><span>Allow object analysis<small>Only when you ask and start a check</small></span></span><input type="checkbox" checked={trackingAllowed} onChange={event => { setTrackingAllowed(event.target.checked); if (tracking && !event.target.checked) void interrupt(false); }}/></label>
+          <p className="glint-setting-note">Camera on: recent images are checked automatically to support your questions. Object movement uses a separate, explicit short-clip check.</p>
+          <h3>Your connection</h3>
+          <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); connect(); }}><span>{view.key.connected ? "Model connected" : "Connect model"}<small>Manage your temporary API key</small></span><ChevronLeft className="glint-next" size={18}/></button>
+          <p className="glint-setting-note">{view.calls} of {view.limit} session calls used. Camera checks also use this allowance.</p>
+          <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); openLink(); }}><span>Add instructions link<small>Use a public product page or manual</small></span><Link size={18}/></button>
+          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Local Kokoro generates speech with device-voice fallback.</p></details>
+          <details className="voice-diagnostics glint-advanced"><summary>Voice test diagnostics</summary><p>Optional event names and timings only. No audio, transcript, images, voiceprints or keys. Up to 120 events remain in this page; shared events appear in server logs.</p>
+            <label className="glint-setting-row"><span>Record and share voice diagnostics</span><input type="checkbox" checked={diagnosticsOn} onChange={event => { if (event.target.checked) { diagnostics.current.start(); setDiagnosticEvents([]); } else diagnostics.current.stop(); setDiagnosticUpload(""); setDiagnosticsOn(event.target.checked); }}/></label>
+            {diagnosticUpload && <p role="status">{diagnosticUpload}</p>}
+            {diagnosticEvents.length > 0 && <><button className="glint-text" onClick={() => { const blob = new Blob([JSON.stringify({version:1, events:diagnostics.current.snapshot()}, null, 2)], {type:"application/json"}); const url = URL.createObjectURL(blob), anchor=document.createElement("a"); anchor.href=url; anchor.download="glint-voice-diagnostics.json"; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>Download voice diagnostics</button><ol>{diagnosticEvents.slice(-8).map((event, index) => <li key={index}>Turn {event.turn}: {event.stage.replaceAll("-", " ")}{event.reason ? ` (${event.reason})` : ""}</li>)}</ol></>}
+            <small>Audio scheduled does not prove sound was heard.</small>
+            {mlVadNote && <p>{mlVadNote}</p>}
+          </details>
+        </div>
+      </dialog>
+      <dialog ref={clipDialog} className="glint-sheet glint-clip" aria-label="Recorded movement" onClose={event => event.currentTarget.querySelector("video")?.pause()}>
+        <header className="glint-sheet-header"><h2>Recorded movement</h2><button className="glint-round" aria-label="Back to conversation" onClick={() => clipDialog.current?.close()}><X size={20}/></button></header>
+        {lastTrackingClip && <video src={lastTrackingClip} controls playsInline aria-label="Recorded object movement clip"/>}
+        <p>{objectMotion?.direction.replaceAll("-", " ")} · relative to the camera</p>
+      </dialog>
       <dialog
         ref={dialog}
         className="modal"
