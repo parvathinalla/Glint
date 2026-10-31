@@ -42,6 +42,57 @@ it("starts speaking complete phrases before the response finishes and cancels qu
   expect(cancel).toHaveBeenCalledOnce();
   expect(changed.at(-1)).toBe(false);
 });
+it("soft-stops speech for a possible echo and resumes the remaining queue", () => {
+  const spoken: { text: string; onend: () => void }[] = [],
+    changed: boolean[] = [];
+  const cancel = vi.fn();
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      cancel,
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue((value) => changed.push(value));
+  queue.push("First. Second. ");
+  expect(spoken.map((x) => x.text)).toEqual(["First."]);
+  queue.softStop();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(changed.at(-1)).toBe(true);
+  spoken[0].onend();
+  expect(spoken).toHaveLength(1);
+  queue.resume();
+  expect(spoken.map((x) => x.text)).toEqual(["First.", "Second."]);
+  expect(changed.at(-1)).toBe(true);
+});
+it("drops the preserved queue when a soft stop is followed by cancel", () => {
+  const spoken: { text: string; onend: () => void }[] = [],
+    changed: boolean[] = [];
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue((value) => changed.push(value));
+  queue.push("First. Second. ");
+  queue.softStop();
+  queue.cancel();
+  queue.resume();
+  expect(spoken).toHaveLength(1);
+  expect(changed.at(-1)).toBe(false);
+});
 it("unlocks with resume plus one silent utterance and loads voices", () => {
   const calls: string[] = [],
     texts: string[] = [],
@@ -158,8 +209,12 @@ it("resumes a paused synthesizer before speaking each phrase", () => {
   queue.push("Hi. ");
   expect(calls).toEqual(["resume", "speak"]);
 });
-it("chunks long phrases so no utterance exceeds the iOS-safe length", () => {
+it("chunks long phrases on iOS so no utterance exceeds the safe length", () => {
   const spoken: { text: string; onend: () => void }[] = [];
+  vi.stubGlobal("navigator", {
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+  });
   vi.stubGlobal("window", {
     speechSynthesis: {
       paused: false,
@@ -183,6 +238,36 @@ it("chunks long phrases so no utterance exceeds the iOS-safe length", () => {
   for (const utterance of spoken)
     expect(utterance.text.length).toBeLessThanOrEqual(200);
   expect(spoken.map((utterance) => utterance.text).join(" ")).toBe(words);
+});
+it("speaks a long reply as whole sentences on desktop", () => {
+  const spoken: { text: string; onend: () => void }[] = [];
+  vi.stubGlobal("navigator", {
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0",
+  });
+  vi.stubGlobal("window", {
+    speechSynthesis: {
+      paused: false,
+      speak: (utterance: (typeof spoken)[number]) => spoken.push(utterance),
+      resume: () => {},
+      cancel: () => {},
+    },
+  });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      constructor(public text: string) {}
+    },
+  );
+  const queue = new SpeechQueue(() => {});
+  const words = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+  queue.push(`${words}. Next sentence here. `);
+  queue.finish();
+  for (const utterance of spoken) utterance.onend();
+  expect(spoken.map((utterance) => utterance.text)).toEqual([
+    `${words}.`,
+    "Next sentence here.",
+  ]);
 });
 it("reports each spoken phrase as it starts", () => {
   const phrases: string[] = [];

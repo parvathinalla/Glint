@@ -26,7 +26,13 @@ const timeline: [number, Phase][] = [
 ];
 
 /** A fresh-document greeting. It never remounts the app or starts media. */
-export default function Opening({ children }: { children: ReactNode }) {
+export default function Opening({
+  children,
+  onReveal,
+}: {
+  children: ReactNode;
+  onReveal?: () => void;
+}) {
   const [phase, setPhase] = useState<Phase>(() =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? "done"
@@ -74,6 +80,14 @@ export default function Opening({ children }: { children: ReactNode }) {
         ?.querySelector<HTMLElement>("main")
         ?.focus({ preventScroll: true });
   }, [phase]);
+
+  const announced = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !announced.current) {
+      announced.current = true;
+      onReveal?.();
+    }
+  }, [phase, onReveal]);
 
   const visible = phase === "revealing" || phase === "done";
   return (

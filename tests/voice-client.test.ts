@@ -76,11 +76,40 @@ describe("streaming voice client", () => {
       epoch: 3,
       requestId: "id-1",
     });
+    expect(t.sockets[0].sent).toHaveLength(1);
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
     expect(t.sockets[0].sent[1]).toBeInstanceOf(Uint8Array);
     t.client.end();
     expect(t.sockets[0].json().at(-1)).toEqual({ type: "end" });
     t.client.closeStream();
     expect(t.sockets[0].json().at(-1)).toEqual({ type: "close" });
+  });
+  it("holds turn audio until opened and drops stale audio on end", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(1, "a");
+    t.client.audio(new Uint8Array([9]));
+    t.client.end();
+    t.client.open(2, "b");
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
+    expect(
+      t.sockets[0].sent.filter((x) => x instanceof Uint8Array),
+    ).toHaveLength(0);
+  });
+  it("caps pre-open buffering to the latest audio", () => {
+    const t = setup();
+    t.client.connect();
+    t.sockets[0].open();
+    t.client.open(1, "a");
+    t.client.audio(new Uint8Array(100000).fill(1));
+    t.client.audio(new Uint8Array(100000).fill(2));
+    t.sockets[0].serverSend(JSON.stringify({ type: "opened" }));
+    const binary = t.sockets[0].sent.filter(
+      (x) => x instanceof Uint8Array,
+    ) as Uint8Array[];
+    expect(binary).toHaveLength(1);
+    expect(binary[0][0]).toBe(2);
   });
   it("generates a request id when the caller passes none", () => {
     const t = setup();

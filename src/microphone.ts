@@ -4,6 +4,7 @@ import {
   pcm16Bytes,
   voiceWav,
 } from "../shared/voice-turn.ts";
+import { MlVad, isMlVadEnabled, loadVadSession } from "./ml-vad.ts";
 
 /** Streaming sink: live PCM16 mono plus a marker at every turn end. */
 export type MicStream = {
@@ -12,18 +13,25 @@ export type MicStream = {
 };
 /** One explicit microphone session, with local turn detection and bounded audio. */
 export function useMicrophone(
-  onReady: (audio: Blob) => void,
+  onReady: (audio: Blob, stats: { voicedMs: number }) => void,
   onProblem: (message: string) => void,
   onSpeechStart: () => void,
   speaking: boolean,
   streaming?: MicStream,
+  vad?: {
+    endSilenceMs?: number | (() => number);
+    shouldExtend?: () => boolean;
+    onSpeechEnd?: (turnSent: boolean) => void;
+    onMlStatus?: (ready: boolean, reason?: string) => void;
+  },
 ) {
   const [enabled, setEnabled] = useState(false),
     [recording, setRecording] = useState(false),
     [preparing, setPreparing] = useState(false);
   const stream = useRef<MediaStream | null>(null),
     context = useRef<AudioContext | null>(null),
-    node = useRef<AudioWorkletNode | null>(null);
+    node = useRef<AudioWorkletNode | null>(null),
+    mlVad = useRef<MlVad | null>(null);
   const generation = useRef(0);
   const callbacks = useRef({
     onReady,
@@ -31,6 +39,7 @@ export function useMicrophone(
     onSpeechStart,
     speaking,
     streaming,
+    vad,
   });
   callbacks.current = {
     onReady,
@@ -38,9 +47,12 @@ export function useMicrophone(
     onSpeechStart,
     speaking,
     streaming,
+    vad,
   };
   const cancel = useCallback(() => {
     generation.current++;
+    void mlVad.current?.dispose();
+    mlVad.current = null;
     if (node.current) {
       node.current.port.onmessage = null;
       node.current.disconnect();
@@ -90,11 +102,40 @@ export function useMicrophone(
       capture.connect(mute);
       mute.connect(audio.destination);
       const detector = new VoiceTurnDetector(audio.sampleRate);
+      const report = (ready: boolean, reason?: string) =>
+        callbacks.current.vad?.onMlStatus?.(ready, reason);
+      const ml = isMlVadEnabled()
+        ? new MlVad(null, audio.sampleRate, undefined, (reason) =>
+            report(false, reason),
+          )
+        : null;
+      mlVad.current = ml;
+      if (ml)
+        void loadVadSession().then(
+          (session) => {
+            if (generation.current === epoch && mlVad.current === ml) {
+              ml.attach(session);
+              report(true);
+            } else void session.release().catch(() => {});
+          },
+          (error: unknown) => {
+            report(
+              false,
+              error instanceof Error ? error.message : "load failed",
+            );
+          },
+        );
       capture.port.onmessage = (event: MessageEvent<Float32Array>) => {
         if (generation.current !== epoch) return;
+        const live = callbacks.current;
         const turn = detector.push(
           event.data,
-          callbacks.current.speaking ? 0.065 : 0.014,
+          live.speaking ? 0.065 : 0.014,
+          {
+            endSilenceMs: live.vad?.endSilenceMs,
+            shouldExtend: live.vad?.shouldExtend,
+            mlSpeech: ml?.push(event.data) ?? null,
+          },
         );
         if (turn.started) {
           setRecording(true);
@@ -105,11 +146,14 @@ export function useMicrophone(
           for (const frame of turn.live)
             sink.samples(pcm16Bytes(frame, audio.sampleRate));
         if (turn.audio) {
-          callbacks.current.onReady(voiceWav(turn.audio, audio.sampleRate));
+          callbacks.current.onReady(voiceWav(turn.audio, audio.sampleRate), {
+            voicedMs: turn.voicedMs ?? 0,
+          });
         }
         if (turn.ended) {
           setRecording(false);
           sink?.turnEnd();
+          callbacks.current.vad?.onSpeechEnd?.(!!turn.audio);
         }
       };
       media.getAudioTracks()[0].addEventListener("ended", () => {

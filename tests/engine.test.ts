@@ -184,7 +184,7 @@ describe("key lifecycle and dispatch", () => {
       code: "STALE",
     });
     expect(infer).toHaveBeenCalledTimes(1);
-    s.calls = 40;
+    s.calls = 100;
     await expect(e.respond(s, input(s, "live"), true)).rejects.toMatchObject({
       code: "APP_LIMIT",
     });
@@ -378,7 +378,7 @@ describe("streaming voice lane", () => {
         closed: () => {},
       }),
     ).toThrowError(expect.objectContaining({ code: "DUPLICATE" }));
-    t.s.calls = 40;
+    t.s.calls = 100;
     expect(() => t.open()).toThrowError(
       expect.objectContaining({ code: "APP_LIMIT" }),
     );
@@ -431,7 +431,7 @@ describe("streaming voice lane", () => {
     await t.e.connect(t.s, "TEST_ONLY_KEY");
     t.open();
     t.ack();
-    t.s.calls = 40;
+    t.s.calls = 100;
     t.sockets[0].onmessage!({
       data: JSON.stringify({ type: "transcript", transcript: "go", final: true }),
     });

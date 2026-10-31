@@ -12,6 +12,7 @@ export default defineConfig({
         "**/docs/**",
         "**/.data/**",
         "**/public/vision/runtime/**",
+        "**/public/vad/runtime/**",
       ],
     },
   },

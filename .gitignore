@@ -8,4 +8,5 @@ playwright-report/
 *.log
 visual-proof/
 public/vision/runtime/
+public/vad/runtime/
 .tmp-test/

@@ -35,6 +35,8 @@ import { canReport, type Feedback, type View } from "../shared/model.ts";
 import { Organizer, Spark } from "./Art.tsx";
 import { asDataUrl, useCamera } from "./camera.ts";
 import { CompanionHome } from "./CompanionHome.tsx";
+import { loadKeyGateDismissed, saveKeyGateDismissed } from "./key-gate.ts";
+import Opening from "./Opening.tsx";
 
 type Message = {
   id: string;
@@ -82,6 +84,8 @@ export default function App() {
   const camera = useCamera(onProblem);
   const [page, setPage] = useState<"home" | "work">("home");
   const [modal, setModal] = useState<"key" | "source" | "about" | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const gateChecked = useRef(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [conversation, setConversation] = useState(0);
   const [model, setModel] = useState("");
@@ -166,6 +170,12 @@ export default function App() {
       live = false;
     };
   }, []);
+  useEffect(() => {
+    if (gateChecked.current || !revealed || !view) return;
+    gateChecked.current = true;
+    if (!view.key.connected && !loadKeyGateDismissed() && modal === null)
+      setModal("key");
+  }, [revealed, view, modal]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -384,6 +394,7 @@ export default function App() {
   const fresh = feedback && now + clockOffset.current < feedback.expiresAt;
 
   return (
+    <Opening onReveal={() => setRevealed(true)}>
     <div className="app-shell">
       <main tabIndex={-1}>
         <header className="topbar">
@@ -935,7 +946,13 @@ export default function App() {
       </main>
 
       {modal === "key" && (
-        <Modal title="Meta Model API" close={() => setModal(null)}>
+        <Modal
+          title="Meta Model API"
+          close={() => {
+            setModal(null);
+            if (!keyLive) saveKeyGateDismissed();
+          }}
+        >
           {problem && (
             <div className="notice error" role="alert">
               {problem}
@@ -1081,7 +1098,7 @@ export default function App() {
               The backend keeps your key in session memory, not browser storage
               or disk. Meta processes requests, and model, search and voice use
               may be billed to your account. Automatic camera observations count
-              toward the same allowance. The local allowance is 40 provider
+              toward the same allowance. The local allowance is 100 provider
               calls. Live access has not been verified here. This development
               server uses loopback HTTP; public use requires HTTPS and account
               authentication.
@@ -1114,5 +1131,6 @@ export default function App() {
         </Modal>
       )}
     </div>
+    </Opening>
   );
 }

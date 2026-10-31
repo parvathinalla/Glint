@@ -1,16 +1,27 @@
-import { test, expect, type Page } from "@playwright/test";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { test, expect, type Page } from "./fixture";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 test.use({ reducedMotion: "reduce" });
 
 async function syntheticMicrophone(page: Page) {
   await page.addInitScript(() => {
+    // Companion specs pin device speech; neural coverage lives in voice.spec.ts.
+    localStorage.setItem("glint-neural-voice", "0");
     const actual = navigator.mediaDevices.getUserMedia.bind(
       navigator.mediaDevices,
     );
     const fixture = window as unknown as {
-      voiceFixture: { say: () => void; media: MediaStream };
+      voiceFixture: {
+        say: () => void;
+        blip: (ms: number) => void;
+        playSpeech: (
+          b64: string,
+          gainValue: number,
+          seconds: number,
+        ) => Promise<void>;
+        media: MediaStream;
+      };
     };
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       if (!constraints?.audio || constraints.video) return actual(constraints);
@@ -24,11 +35,43 @@ async function syntheticMicrophone(page: Page) {
       gain.connect(output);
       oscillator.start();
       await context.resume();
+      // Live source nodes must stay referenced while playing: an
+      // unreferenced BufferSource can be garbage-collected mid-burst and
+      // render silence. Released onended.
+      const live: AudioNode[] = [];
+      const retain = (source: AudioBufferSourceNode, gain: GainNode) => {
+        live.push(source, gain);
+        source.onended = () => {
+          const at = live.indexOf(source);
+          if (at >= 0) live.splice(at, 2);
+        };
+      };
       fixture.voiceFixture = {
         media: output.stream,
         say: () => {
           gain.gain.setValueAtTime(0.12, context.currentTime);
           gain.gain.setValueAtTime(0, context.currentTime + 0.7);
+        },
+        // Short burst: long enough to start a detector turn (160 ms) but
+        // too short to produce turn audio (200 ms voiced), so the turn is
+        // dropped without transcription. A tone, not noise: browser noise
+        // suppression would eat a white-noise burst before detection.
+        blip: (ms: number) => {
+          gain.gain.setValueAtTime(0.12, context.currentTime);
+          gain.gain.setValueAtTime(0, context.currentTime + ms / 1000);
+        },
+        // Real-speech clip through its own gain stage (base64 WAV bytes).
+        playSpeech: async (b64: string, gainValue: number, seconds: number) => {
+          const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          const decoded = await context.decodeAudioData(raw.buffer);
+          const source = context.createBufferSource();
+          source.buffer = decoded;
+          const speechGain = context.createGain();
+          speechGain.gain.value = gainValue;
+          source.connect(speechGain);
+          speechGain.connect(output);
+          retain(source, speechGain);
+          source.start(0, 0, seconds);
         },
       };
       return output.stream;
@@ -297,7 +340,7 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
       "Sent as a voice recording (live transcription unavailable).",
       { exact: true },
     ),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page.waitForTimeout(600);
   await page.evaluate(() =>
     (
@@ -518,6 +561,400 @@ test("voice can interrupt read-aloud and continue with a new automatic turn", as
   ).toBeVisible();
 });
 
+test("a short noise burst pauses read-aloud and speech resumes after the drop", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    const fixture = window as unknown as { spoken: string[]; canceled: number };
+    fixture.spoken = [];
+    fixture.canceled = 0;
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {
+          fixture.canceled++;
+        },
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    turns = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    // Meta-like: the full first turn transcribes; a short blip that slips
+    // through as a sent turn yields no speech.
+    await route.fulfill({
+      json: {
+        transcript: voiceCalls === 1 ? "Tell me about braids." : "",
+        epoch: request.epoch,
+      },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const request = route.request().postDataJSON();
+    turns++;
+    expect(request.epoch).toBe(epoch);
+    const text =
+      turns === 1
+        ? "First sentence here. Second sentence here. "
+        : "Unexpected second turn. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      (window as unknown as { voiceFixture: { say: () => void } })
+        .voiceFixture.say(),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { spoken: string[] }).spoken.length,
+      ),
+    )
+    .toBe(1);
+  // Past the 500 ms barge-guard grace so the burst counts as an interrupt.
+  await page.waitForTimeout(600);
+  const canceledBefore = await page.evaluate(
+    () => (window as unknown as { canceled: number }).canceled,
+  );
+  await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          voiceFixture: { blip: (ms: number) => void };
+        }
+      ).voiceFixture.blip(180),
+  );
+  // The burst interrupts (soft-stop) and the dropped turn resumes speech.
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { canceled: number }).canceled),
+    )
+    .toBeGreaterThan(canceledBefore);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { spoken: string[] }).spoken,
+      ),
+    )
+    .toEqual(["First sentence here.", "Second sentence here."]);
+  // Either the burst dropped (no transcription) or it was sent and
+  // transcribed empty like Meta would: no agent turn either way.
+  await page.waitForTimeout(1500);
+  expect(turns).toBe(1);
+  expect(voiceCalls).toBeLessThanOrEqual(2);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("a sent pop that transcribes empty resumes read-aloud", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    const fixture = window as unknown as { spoken: string[]; canceled: number };
+    fixture.spoken = [];
+    fixture.canceled = 0;
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {
+          fixture.canceled++;
+        },
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    turns = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        transcript: voiceCalls === 1 ? "Tell me about braids." : "",
+        epoch: request.epoch,
+      },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const request = route.request().postDataJSON();
+    turns++;
+    expect(request.epoch).toBe(epoch);
+    const text =
+      turns === 1
+        ? "First sentence here. Second sentence here. "
+        : "Unexpected second turn. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      (window as unknown as { voiceFixture: { say: () => void } })
+        .voiceFixture.say(),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { spoken: string[] }).spoken.length,
+      ),
+    )
+    .toBe(1);
+  await page.waitForTimeout(600);
+  const canceledBefore = await page.evaluate(
+    () => (window as unknown as { canceled: number }).canceled,
+  );
+  // 400 ms always produces turn audio, unlike the knife-edge 180 ms blip.
+  await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          voiceFixture: { blip: (ms: number) => void };
+        }
+      ).voiceFixture.blip(400),
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { canceled: number }).canceled),
+    )
+    .toBeGreaterThan(canceledBefore);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { spoken: string[] }).spoken,
+      ),
+    )
+    .toEqual(["First sentence here.", "Second sentence here."]);
+  await page.waitForTimeout(1500);
+  expect(turns).toBe(1);
+  expect(voiceCalls).toBe(2);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("neural VAD hears quiet speech that energy misses (and only it does)", async ({
+  page,
+}) => {
+  const clip = readFileSync(
+    resolve("tests/fixtures/speech-jfk.wav"),
+  ).toString("base64");
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    const fixture = window as unknown as { spoken: string[] };
+    fixture.spoken = [];
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {},
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    turns = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    await route.fulfill({
+      json: { transcript: "Quiet test phrase.", epoch: request.epoch },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const request = route.request().postDataJSON();
+    turns++;
+    expect(request.epoch).toBe(epoch);
+    const text = "Heard you quietly. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch } })}\n\n`,
+    });
+  });
+  const play = () =>
+    page.evaluate(
+      ([b64]) =>
+        (
+          window as unknown as {
+            voiceFixture: {
+              playSpeech: (
+                data: string,
+                gainValue: number,
+                seconds: number,
+              ) => Promise<void>;
+            };
+          }
+        ).voiceFixture.playSpeech(b64, 0.025, 5),
+      [clip],
+    );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  // Let the model load: 2.3 MB weights plus WASM compile, locally served.
+  await page.waitForTimeout(3000);
+  await play();
+  // Neural detection starts the turn even though energy stays sub-threshold.
+  await expect(page.getByText("Heard you quietly.", { exact: true })).toBeVisible(
+    { timeout: 20000 },
+  );
+  expect(voiceCalls).toBe(1);
+  expect(turns).toBe(1);
+  await expect(page.getByText(/Neural voice detection/)).toHaveCount(0);
+  // Phase 2: the same clip with neural VAD disabled must detect nothing.
+  await page.getByRole("button", { name: "End voice chat" }).click();
+  await page.evaluate(() => localStorage.setItem("glint-ml-vad", "0"));
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  await play();
+  await page.waitForTimeout(7500);
+  expect(voiceCalls).toBe(1);
+  expect(turns).toBe(1);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("voice still works on energy when the neural model is missing", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+  });
+  await page.routeWebSocket("**/events", () => {});
+  await page.route("**/vad/**", (route) => route.abort());
+  let state: Record<string, unknown>,
+    epoch = 0,
+    turns = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    const request = route.request().postDataJSON();
+    await route.fulfill({
+      json: { transcript: "Loud and clear.", epoch: request.epoch },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const request = route.request().postDataJSON();
+    turns++;
+    expect(request.epoch).toBe(epoch);
+    const text = "Fallback reply. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      (window as unknown as { voiceFixture: { say: () => void } })
+        .voiceFixture.say(),
+  );
+  await expect(page.getByText("Fallback reply.", { exact: true })).toBeVisible(
+    { timeout: 20000 },
+  );
+  expect(turns).toBe(1);
+  await expect(
+    page.getByText(/Neural voice detection unavailable/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
 test("speaker echo is transcribed but never answered (loop breaker)", async ({
   page,
 }) => {
@@ -709,4 +1146,498 @@ test("muting a streamed reply prevents later sentences from being spoken", async
       () => (window as unknown as { spoken: string[] }).spoken.length,
     ),
   ).toBe(1);
+});
+
+async function syntheticSpeaker(
+  page: Page,
+  plan: string[],
+  seed = true,
+) {
+  // Plan entries per embedding call: "owner", "stranger", or
+  // "stranger:<ms>" / "owner:<ms>" for a delayed verdict. The neural net
+  // is mocked but the real cosine + threshold policy scores it.
+  await page.addInitScript((options: { plan: string[]; seed: boolean }) => {
+    const dim = 256,
+      owner = new Array(dim).fill(0) as number[];
+    owner[0] = 1;
+    if (options.seed)
+      localStorage.setItem(
+        "glint-speaker-voiceprint",
+        JSON.stringify({
+          version: 1,
+          model: "wespeaker-resnet34-LM",
+          dim,
+          samples: 2,
+          enrolledAt: Date.now(),
+          vector: owner,
+        }),
+      );
+    const stranger = new Array(dim).fill(0) as number[];
+    stranger[1] = 1;
+    let calls = 0;
+    (window as unknown as { __glintSpeaker: unknown }).__glintSpeaker = {
+      embed: () => {
+        const [verdict, delay] =
+          options.plan[Math.min(calls++, options.plan.length - 1)].split(":");
+        const vector = Float32Array.from(
+          verdict === "owner" ? owner : stranger,
+        );
+        const ms = Number(delay ?? 0);
+        if (ms > 0)
+          return new Promise<Float32Array>((resolve) =>
+            setTimeout(() => resolve(vector), ms),
+          );
+        return vector;
+      },
+    };
+  }, { plan, seed });
+}
+
+async function say(page: Page) {
+  await page.evaluate(
+    () =>
+      (window as unknown as { voiceFixture: { say: () => void } })
+        .voiceFixture.say(),
+  );
+}
+
+async function sayLong(page: Page) {
+  // 1.5 s tone: turn audio lands well above the 0.8 s speaker-check
+  // bypass, unlike the 700 ms say() that straddles it.
+  await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          voiceFixture: { blip: (ms: number) => void };
+        }
+      ).voiceFixture.blip(1500),
+  );
+}
+
+
+test("speaker lock answers the owner and ignores a stranger's voice", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await syntheticSpeaker(page, ["owner", "stranger", "stranger:800"]);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    // Gating tests isolate the speaker verdict; ML tone hallucinations
+    // would make turn bounds nondeterministic.
+    localStorage.setItem("glint-ml-vad", "0");
+    const fixture = window as unknown as { spoken: string[] };
+    fixture.spoken = [];
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {},
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    agentHits = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    // The fast stranger verdict must land mid-transcription so the abort
+    // happens before any "you" message posts.
+    if (voiceCalls === 2) await new Promise((r) => setTimeout(r, 400));
+    await route.fulfill({ json: { transcript: "hello there", epoch: request.epoch } });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    agentHits++;
+    const request = route.request().postDataJSON(),
+      text = "Hi, owner. ";
+    // The slow stranger verdict (300 ms) must land before the first reply
+    // token so the aborted turn renders no reply at all.
+    if (agentHits === 2) await new Promise((r) => setTimeout(r, 2500));
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch: request.epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  // Owner turn: answered normally.
+  await sayLong(page);
+  await expect(page.getByText("Hi, owner.", { exact: true })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(agentHits).toBe(1);
+  // Past the 500 ms barge-guard grace after the reply, or the turn is
+  // dropped as probable echo before any check runs.
+  await page.waitForTimeout(700);
+  // Fast stranger: killed before transcription finishes — no agent hit,
+  // no "you" message, just the transient note.
+  await sayLong(page);
+  await page.waitForTimeout(5000);
+  expect(agentHits).toBe(1);
+  await expect(page.locator(".companion-message.from-you")).toHaveCount(1);
+  await expect(
+    page.locator(".companion-speaker-note", { hasText: "Ignored" }),
+  ).toBeVisible();
+  // Drain the fast verdict's transient note so the next assertion cannot
+  // pass on stale UI.
+  await expect(page.locator(".companion-speaker-note")).toBeHidden({
+    timeout: 12000,
+  });
+  // Slow stranger: the "you" message posts, then the verdict lands and the
+  // turn dies marked ignored with no reply.
+  await sayLong(page);
+  await expect(
+    page.locator(".companion-message.from-you small", {
+      hasText: "Ignored",
+    }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".companion-message.from-you")).toHaveCount(2);
+  await expect(page.locator(".companion-message.from-glint")).toHaveCount(1);
+  expect(agentHits).toBe(2);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("a stranger's barge stops the reply and resumes the interrupted speech", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await syntheticSpeaker(page, ["owner", "stranger:400"]);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    localStorage.setItem("glint-ml-vad", "0");
+    const fixture = window as unknown as { spoken: string[]; canceled: number };
+    fixture.spoken = [];
+    fixture.canceled = 0;
+    Object.defineProperty(window, "speechSynthesis", {
+      value: {
+        speak: (utterance: SpeechSynthesisUtterance) => {
+          if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+        },
+        cancel: () => {
+          fixture.canceled++;
+        },
+      },
+    });
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    turns = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        transcript: voiceCalls === 1 ? "Tell me about braids." : "stranger words",
+        epoch: request.epoch,
+      },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    const request = route.request().postDataJSON();
+    turns++;
+    const text =
+      turns === 1
+        ? "First sentence here. Second sentence here. "
+        : "Stranger reply here. ";
+    // The stranger's verdict (400 ms) must land before the first reply
+    // token so the interrupted speech is still preserved to resume.
+    if (turns === 2) await new Promise((r) => setTimeout(r, 1200));
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch: request.epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  await sayLong(page);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as unknown as { spoken: string[] }).spoken.length,
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(1);
+  // Past the 500 ms barge-guard grace so the burst counts as an interrupt.
+  await page.waitForTimeout(600);
+  const canceledBefore = await page.evaluate(
+    () => (window as unknown as { canceled: number }).canceled,
+  );
+  await sayLong(page);
+  // The stranger interrupts, then the verdict resumes the owner's reply
+  // and marks the turn ignored; the stranger's own reply never speaks.
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { canceled: number }).canceled),
+    )
+    .toBeGreaterThan(canceledBefore);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => (window as unknown as { spoken: string[] }).spoken,
+        ),
+      { timeout: 15000 },
+    )
+    .toEqual(["First sentence here.", "Second sentence here."]);
+  await expect(
+    page.locator(".companion-message.from-you small", {
+      hasText: "Ignored",
+    }),
+  ).toBeVisible();
+  await page.waitForTimeout(2000);
+  expect(turns).toBe(2);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { spoken: string[] }).spoken,
+    ),
+  ).toEqual(["First sentence here.", "Second sentence here."]);
+  await expect(page.locator(".companion-message.from-glint")).toHaveCount(1);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("voice enrollment teaches the lock and turning it off clears it", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await syntheticSpeaker(page, ["owner"], false);
+  await page.routeWebSocket("**/events", () => {});
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch(),
+      view = await response.json();
+    view.key = { connected: true, models: ["muse-spark-test"] };
+    await route.fulfill({ json: view });
+  });
+  await page.goto("/");
+  await expect(page.getByText("Voice lock: Off")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Teach Glint your voice" })
+    .click();
+  await expect(page.getByText("Recording sample 1 of 2")).toBeVisible();
+  // Audible speech inside each 4 s window (the silence guard rejects
+  // inaudible samples instead of minting a garbage voiceprint).
+  await page.waitForTimeout(1000);
+  await say(page);
+  await expect(page.getByText("Recording sample 2 of 2")).toBeVisible({
+    timeout: 15000,
+  });
+  await say(page);
+  await expect(page.getByText("Voice lock: On")).toBeVisible({
+    timeout: 20000,
+  });
+  const stored = await page.evaluate(() =>
+    JSON.parse(
+      localStorage.getItem("glint-speaker-voiceprint") ?? "null",
+    ),
+  );
+  expect(stored.model).toBe("wespeaker-resnet34-LM");
+  expect(stored.vector).toHaveLength(256);
+  expect(stored.vector[0]).toBeCloseTo(1, 6);
+  await page.getByRole("button", { name: "Turn off" }).click();
+  await expect(page.getByText("Voice lock: Off")).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("glint-speaker-voiceprint"),
+    ),
+  ).toBeNull();
+});
+
+test("short turns bypass the speaker check instead of stranding backchannels", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await syntheticSpeaker(page, ["stranger"]);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-streaming-voice", "0");
+    localStorage.setItem("glint-ml-vad", "0");
+  });
+  await page.routeWebSocket("**/events", () => {});
+  let state: Record<string, unknown>,
+    epoch = 0,
+    agentHits = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    const request = route.request().postDataJSON();
+    await route.fulfill({
+      json: { transcript: "yes", epoch: request.epoch },
+    });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    agentHits++;
+    const request = route.request().postDataJSON(),
+      text = "On it. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch: request.epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  // 400 ms of voice: a sent turn, but under the 0.8 s check floor, so it
+  // is answered without consulting the (stranger) mock.
+  await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          voiceFixture: { blip: (ms: number) => void };
+        }
+      ).voiceFixture.blip(400),
+  );
+  await expect(page.getByText("On it.", { exact: true })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(agentHits).toBe(1);
+  await expect(
+    page.locator(".companion-message.from-you small"),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "End voice chat" }).click();
+});
+
+test("streamed turns use the settled speaker verdict without waiting", async ({
+  page,
+}) => {
+  await syntheticMicrophone(page);
+  await syntheticSpeaker(page, ["stranger", "owner"]);
+  await page.addInitScript(() => {
+    localStorage.setItem("glint-ml-vad", "0");
+  });
+  await page.routeWebSocket("**/events", () => {});
+  // Minimal voice-stream server: opens lanes, answers each ended turn
+  // after a beat so the instant mock verdict is always settled first.
+  let turnId = 0;
+  await page.routeWebSocket("**/voice-stream", (ws) => {
+    ws.onMessage(async (message) => {
+      // Raw payloads: JSON control frames, or binary audio to ignore.
+      const text =
+        typeof message === "string" ? message : message.toString("utf8");
+      let parsed: { type?: string };
+      try {
+        parsed = JSON.parse(text) as { type?: string };
+      } catch {
+        return;
+      }
+      if (parsed.type === "open")
+        ws.send(JSON.stringify({ type: "opened" }));
+      if (parsed.type === "end") {
+        turnId++;
+        await new Promise((r) => setTimeout(r, 300));
+        ws.send(
+          JSON.stringify({ type: "turn", turnId, transcript: "hello there" }),
+        );
+      }
+    });
+  });
+  let state: Record<string, unknown>,
+    epoch = 0,
+    agentHits = 0,
+    voiceCalls = 0;
+  await page.route("**/api/session", async (route) => {
+    state = await (await route.fetch()).json();
+    state.key = { connected: true, models: ["muse-spark-test"] };
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/phase", async (route) => {
+    epoch++;
+    state.epoch = epoch;
+    await route.fulfill({ json: state });
+  });
+  await page.route("**/api/voice", async (route) => {
+    voiceCalls++;
+    const request = route.request().postDataJSON();
+    await route.fulfill({ json: { transcript: "hello there", epoch: request.epoch } });
+  });
+  await page.route("**/api/agent/stream", async (route) => {
+    agentHits++;
+    const request = route.request().postDataJSON(),
+      text = "Hi, owner. ";
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        `data: ${JSON.stringify({ type: "delta", text })}\n\n` +
+        `data: ${JSON.stringify({ type: "done", reply: { message: text, sources: [], searched: false, epoch: request.epoch } })}\n\n`,
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Talk to Glint", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "End voice chat" }),
+  ).toBeVisible();
+  // Stranger first: settled verdict kills the turn before any agent call.
+  await sayLong(page);
+  await expect(
+    page.locator(".companion-speaker-note", { hasText: "Ignored" }),
+  ).toBeVisible({ timeout: 15000 });
+  expect(agentHits).toBe(0);
+  await expect(page.locator(".companion-message.from-you")).toHaveCount(0);
+  // Owner next: the settled owner verdict proceeds straight to a reply.
+  await sayLong(page);
+  await expect(page.getByText("Hi, owner.", { exact: true })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(agentHits).toBe(1);
+  // Pure streamed run: the WAV fallback never fired.
+  expect(voiceCalls).toBe(0);
+  await page.getByRole("button", { name: "End voice chat" }).click();
 });

@@ -13,26 +13,24 @@ flowchart LR
   Task[Task and conversation context] --> Muse
   Muse --> Memory[Activity / scene / changes in session memory]
   Memory --> Conversation[Muse conversation]
+  Memory --> Caption[Silent Seeing caption]
   Sequence --> Conversation
-  Events --> Reaction[Quick greeting]
-  Muse --> Reaction
   Conversation --> Reply[Streamed text / browser speech]
-  Reaction --> Reply
 ```
 
-The local model supports fast visible-pose reactions. General activity interpretation comes from Muse comparing the sequence, prior observation and task context: it is not limited to a hard-coded gesture list. Visual context and local pose events are estimates, not independently verified facts. Low-confidence observations do not produce proactive speech.
+The local model records visible-pose events that feed observation silently. General activity interpretation comes from Muse comparing the sequence, prior observation and task context: it is not limited to a hard-coded gesture list. Visual context and local pose events are estimates, not independently verified facts. Nothing speaks proactively at any confidence: Glint answers only what the user asks, using vision silently as evidence, and describes what it sees only when explicitly asked.
 
 ## Current scheduling
 
 - Local camera buffering samples about once per second, with brief motion bursts, bounded to twelve seconds/32 frames/4 MB.
-- The pose worker receives at most five frames per second, one at a time, at reduced resolution. Reactions require stable visible landmarks across time and rearm/cooldown rules.
+- The pose worker receives at most five frames per second, one at a time, at reduced resolution. Events require stable visible landmarks across time and rearm/cooldown rules, and are recorded silently.
 - Muse receives at most six chronologically ordered JPEGs from the latest eight seconds. Each image is bounded below 90 KB; the client reduces large images before encoding.
 - Background observation starts after initialization and targets one request per six seconds while the conversation is idle. Slow service responses reduce this rate. No backlog accumulates.
 - Voice or typed interaction cancels a pending background job and takes priority. Questions receive current frame history and recent activity context.
-- Proactive model speech has a eight-second cooldown; unchanged scenes should remain quiet. Local gesture greetings use separate transition/cooldown rules.
+- There is no proactive speech: observation updates the silent Seeing caption and session memory only. Glint speaks solely in direct answers to the user.
 - Stop camera terminates the pose worker, clears the frame ring and event history, cancels observation and clears server visual context. Backgrounding and disconnect also stop capture.
 
-The existing session-only key, one-in-flight policy and 40-dispatch allowance apply to automatic camera observations as well as voice/research. Camera mode therefore makes billed requests without waiting for a question. Exhaustion or a provider error pauses visual awareness; there is no unlimited retry loop. Ending voice disables automatic spoken reactions, but a camera left on continues visual observation.
+The existing session-only key, one-in-flight policy and 100-dispatch allowance apply to automatic camera observations as well as voice/research. Camera mode therefore makes billed requests without waiting for a question. Exhaustion or a provider error pauses visual awareness; there is no unlimited retry loop. There are no automatic spoken reactions; a camera left on continues silent visual observation.
 
 ## Runtime and evidence
 

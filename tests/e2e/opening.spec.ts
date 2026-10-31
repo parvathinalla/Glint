@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 import { mkdirSync } from "node:fs";
 
 test("opening walks in profile, turns, blooms, then reveals the untouched site", async ({
@@ -13,6 +13,9 @@ test("opening walks in profile, turns, blooms, then reveals the untouched site",
     } : undefined,
   });
   const page = await context.newPage();
+  await context.addInitScript(() => {
+    localStorage.setItem("glint-key-gate", "1");
+  });
   await page.clock.install({ time: new Date("2026-10-28T12:00:00Z") });
   await page.clock.pauseAt(new Date("2026-10-28T12:00:01Z"));
   let media = 0;

@@ -85,6 +85,54 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
       }),
     ).rejects.toMatchObject({ code: "FRAMES_STALE" });
   });
+  it("instructs direct friendly answers with silent vision", async () => {
+    const requests: Record<string, unknown>[] = [];
+    const { engine, session } = fixture((async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      requests.push(request);
+      if (request.text?.format?.name === "visual_observation")
+        return answer(
+          JSON.stringify({
+            activity: "sitting quietly",
+            scene: "A person on a couch.",
+            changes: [],
+            confidence: "low",
+            say: null,
+          }),
+        );
+      return answer("ok");
+    }) as typeof fetch);
+    await engine.connect(session, "TEST_ONLY_KEY");
+    const now = Date.now(),
+      frames = [now - 2000, now - 1000, now].map((capturedAt) => ({
+        image: "data:image/jpeg;base64,AAA",
+        capturedAt,
+      }));
+    await engine.observe(session, {
+      frames,
+      epoch: session.epoch,
+      requestId: randomUUID(),
+      model: "muse-spark-test",
+    });
+    await engine.converse(session, {
+      question: "What time is it?",
+      epoch: session.epoch,
+      model: "muse-spark-test",
+      requestId: randomUUID(),
+    });
+    const [observeInstructions, converseInstructions] = requests.map((request) =>
+      String(request.instructions),
+    );
+    expect(converseInstructions).toContain(
+      "friendly companion, never a formal assistant",
+    );
+    expect(converseInstructions).toContain("answer only what the user asked");
+    expect(converseInstructions).toContain("Never open with I can see");
+    expect(converseInstructions).not.toContain("discuss visible actions");
+    expect(converseInstructions).not.toContain("Say I can see or It looks like");
+    expect(observeInstructions).toContain("'say' MUST always be null");
+    expect(observeInstructions).not.toContain("Prefer null for say");
+  });
   it("retains delayed image answers as snapshots, while rejecting old images before dispatch", async () => {
     let now = 100000;
     const engine = new Engine(
@@ -322,7 +370,7 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
     ])
       expect(publicLink.safeParse(url).success).toBe(false);
   });
-  it("rejects canceled results and enforces the shared 40-call limit", async () => {
+  it("rejects canceled results and enforces the shared 100-call limit", async () => {
     let release: (response: Response) => void = () => {};
     const { engine, session } = fixture(
       (() =>
@@ -342,7 +390,7 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
     release(answer());
     await expect(pending).rejects.toMatchObject({ code: "CANCELED" });
     expect(session.agentHistory).toEqual([]);
-    session.calls = 40;
+    session.calls = 100;
     await expect(engine.converse(session, request())).rejects.toMatchObject({
       code: "APP_LIMIT",
     });

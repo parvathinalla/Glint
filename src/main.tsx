@@ -1,10 +1,5 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
-import Opening from "./Opening.tsx";
 import "./styles.css";
 import "./theme.css";
-createRoot(document.getElementById("root")!).render(
-  <Opening>
-    <App />
-  </Opening>,
-);
+createRoot(document.getElementById("root")!).render(<App />);

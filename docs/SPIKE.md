@@ -58,7 +58,7 @@ stays "not measured" until a real-device run fills it.
 4. Compute p50/p95 per span; fill the table; keep the raw lines with the report.
 5. Approximation notes (do not over-claim): `capturedStartMs` is turn-start
    detection (onset + ~160 ms candidate + pre-roll), not annotated onset;
-   `asrFinalMs` includes the 850 ms end-of-silence wait plus WAV upload;
+   `asrFinalMs` includes the end-of-silence wait (500 ms streaming, 850 ms WAV) plus upload;
    `playbackStartMs` is first-phrase `speak()` dispatch, not audible sound.
 
 ### Instrumentation gaps for later tasks
@@ -230,3 +230,137 @@ Unknown (SAM, undocumented on the pages above):
 - Cost-governor inputs now grounded: ASR $0.18/hr whole-second; SAM video
   $0.20/1K frames min-50, images $2.50/1K; no published token billing for
   either (audio/frames are separate line items).
+
+## Part C — ML VAD evaluation (Silero, IMPLEMENTED same day)
+
+Date: 2026-10-30. Interruption-parity track: energy VAD stays, with a local
+neural VAD as the next slice. Implemented below this line; see
+IMPLEMENTATION.md for the shipped summary.
+
+Candidate: Silero VAD v6 ONNX (~2.3 MB, MIT), same I/O as v5: 512-sample
+frames at 16 kHz plus a [2,1,128] state tensor, each frame prefixed with the
+last 64 samples of the previous one. Runtime: onnxruntime-web (WASM),
+~0.4 ms inference per 32 ms chunk on CPU — negligible next to the 42.7 ms
+detector frame. The `@ricky0123/vad-web` wrapper packages model + runtime if
+vendoring by hand is unwanted.
+
+Fit: detection runs on the main thread today (the AudioWorklet only posts
+1024-sample @24 kHz frames), so inference slots into the existing message
+handler — no worklet threading pain. The handler would resample 24→16 kHz,
+accumulate 512-sample windows, and fuse ML probability with the energy
+threshold (ML-first, energy fallback when the model fails to load, mirroring
+the streaming→WAV fallback discipline). Model vendoring mirrors the vision
+precedent: pinned file under `public/` with a hash check at build time.
+Production CSP already permits WebAssembly compilation.
+
+What it buys: neural rejection of pops, clicks, keyboard, steady noise, and
+music that clear an energy threshold — fewer false barge-ins and more
+reliable turn starts in noisy rooms. What it does NOT buy: echo rejection
+(echo is real speech acoustically — still needs the barge guard + transcript
+verdict) or speaker identification (still nobody's feature, ChatGPT included).
+
+Costs/risks: onnxruntime-web adds ~10 MB of lazily-loaded WASM assets (needs
+Vite asset config + lazy import to keep the main bundle lean); first
+inference needs a warm-up at mic start (~100–300 ms, inside existing mic
+setup); stateful model must reset per voice session. Effort: medium, about
+one session including tests. Awaiting user go-ahead before adding the
+dependency.
+
+## Part D -- speaker verification evaluation (WeSpeaker, IMPLEMENTED same day)
+
+Date: 2026-10-30. Speaker-lock track: every voice turn is verified against an
+enrolled owner voiceprint, on-device. Implemented below this line; see
+IMPLEMENTATION.md for the shipped summary.
+
+Candidate: WeSpeaker ResNet34-LM ONNX (~25.3 MB, Apache-2.0 weights via the
+sherpa-onnx speaker-recognition release), VoxCeleb-trained English, 256-dim
+embeddings from 80-bin Kaldi fbank. ERes2Net (same release, same size)
+separated slightly worse on the release's own three-speaker test clips
+(cross max 0.305 vs 0.248) and no better in white noise, so ResNet34-LM won
+on the stranger ceiling, which is the false-accept direction that matters.
+
+Frontend: the model needs Kaldi fbank (25 ms Povey window, 10 ms shift, 80
+mel bins) PLUS per-utterance mean normalization. Validated as required:
+without CMN, same-speaker (0.49) and cross-speaker (0.50) overlap; with CMN,
+same 0.67-0.77 vs cross <= 0.25. Voiced-only frame selection was tested as a
+noise-robustness help and disproven (identical or worse), so full-turn audio
+is embedded. Implementation is dependency-free (radix-2 FFT plus triangular
+mel banks).
+
+Thresholds (resnet34-LM + CMN, single-thread WASM): owner clean 0.67-0.77,
+owner at 10 dB white noise 0.38, owner at 5 dB 0.32 (at the threshold),
+strangers <= 0.25 clean or noisy, white noise 0.20, sine -0.02. Reject below
+0.32: every measured stranger rejected with margin, owner allowed down to
+about 7 dB white noise (a pessimistic floor; VoxCeleb training covers real
+room noise better). Short turns (under 0.8 s voiced) bypass the check:
+backchannels must never be blocked, and sub-second embeddings are
+unreliable.
+
+Fit: inference runs about 750 ms per 5 s of audio (desktop single-thread
+WASM; phones several times slower), far too slow to gate turns synchronously,
+so verification runs ASIDE transcription and a stranger verdict kills the turn
+mid-flight (before the first reply token the interrupted speech is still
+preserved and resumes like any false trigger). Enrollment averages two 4 s
+samples (averaging measurably rescues noisy scores); an inaudible-sample
+guard refuses to mint a voiceprint from silence. Everything uncertain fails
+open; only confident strangers fail closed.
+
+What it buys: TV speech, nearby conversations, and other people can no longer
+drive turns or hold Glint's attention; false barge-ins resume instead of
+derailing. What it does NOT buy: diarization (one enrolled owner, not
+per-speaker labels), liveness/anti-spoofing (a recording of the owner
+verifies), or far-field reliability (scores degrade with distance and
+reverberation like any embedding).
+
+Costs/risks: +25 MB vendored weights (served from /speaker/, cached after
+first load) plus per-turn embedding compute on phones (async, off the reply
+path); the shared ONNX Runtime WASM build serves both VAD and speaker models.
+Owner false-rejects in severe noise remain possible below about 5 dB white
+noise, where ASR is unusable anyway; the kill switch is
+localStorage glint-speaker-lock=0.
+
+## Part E -- neural TTS evaluation (Kokoro via sherpa-onnx, IMPLEMENTED same day)
+
+Date: 2026-10-30. Streaming-voice track: one consistent natural Glint voice
+replaces per-device robot speech. Implemented below this line; see
+IMPLEMENTATION.md for the shipped summary.
+
+Rejected first: kokoro-js (Transformers.js + ONNX Runtime WASM) loads the 86
+MB q8 model in Node but its espeak-ng phonemizer WASM aborts the process on
+the first generate (minified emscripten crash, exit 7, kokoro-js 1.2.1, Node
+24). Running it in the browser instead would distribute GPL code to clients,
+so it is out on both robustness and licensing.
+
+Winner: sherpa-onnx-node 2.0.1 (prebuilt native binding, Apache-2.0) with the
+Kokoro int8 multi-lang v1.0 pack (model 109 MB, voices 27 MB, lexicon 6 MB,
+Apache-2.0 weights). Measured on this laptop CPU: 1.8 s load, RTF ~1.0 per
+sentence (2 threads; 4/8 threads no faster), 24 kHz output, healthy levels
+(peak ~0.3, RMS ~0.06), ~420 MB RSS hot. Synthesis is lexicon-only, so no
+espeak/GPL bytes ship anywhere. generateAsync keeps the event loop free, but
+its progress callback fires once per sentence (no intra-sentence chunks), so
+streaming is sentence-pipelined: the LLM stream splits into sentences, each
+synths FIFO while later text arrives, and audio plays gaplessly. First audio
+lands after the first sentence synths (~2-4 s for a typical opener, plus LLM
+time to that sentence); short openers and the boot warmup keep it tight.
+
+Deferred, not rejected: KittenTTS Nano (25 MB) would likely synth 3-5x
+faster, but sherpa's Kitten needs the 122-file espeak-ng-data tree and its
+quality is unprobed; the GlintVoice provider interface keeps the model
+swappable for that follow-up. Cloud TTS stays the latency fallback if local
+RTF ever blocks parity.
+
+What it buys: every device hears the same natural voice (af_heart), replies
+start speaking while text still streams, and any synth/decode failure falls
+back to device speech per sentence instead of going silent. What it does NOT
+buy: sub-second first audio (whole-sentence RTF 1.0 sets the floor), or
+neural speech in text chat (App.tsx unchanged by design).
+
+Post-ship fix (same day, from the first phone run): overlapping
+generateAsync calls from barged replies stacked on the CPU-bound native
+synth and slowed each other from 3.3 s to 10.6 s per sentence; audio
+then arrived generations late and the client's staleness guard dropped
+it, which read on the phone as "speaks once, then silent". All requests
+now share one FIFO synth lane, so every sentence synths at solo speed.
+The same run showed the lexicon silently skipping what's/what'd and any
+curly-quote token; the speak cleaner now folds those to ASCII and
+expands the seven proven-missing contractions.

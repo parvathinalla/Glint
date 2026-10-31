@@ -13,7 +13,9 @@ export async function readEvents(
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 2000000)
+      // Sized for neural-voice audio: 24 kHz mono base64 runs ~64 KB/s,
+      // so a long reply legitimately spans megabytes.
+      if (size > 20000000)
         throw Error("The response stream exceeded its size limit.");
       buffer += decoder.decode(value, { stream: true });
       let boundary: RegExpMatchArray | null;
@@ -28,7 +30,7 @@ export async function readEvents(
           .join("\n");
         if (data && data !== "[DONE]") accept(JSON.parse(data));
       }
-      if (buffer.length > 250000)
+      if (buffer.length > 4000000)
         throw Error("A response event exceeded its size limit.");
     }
   } finally {

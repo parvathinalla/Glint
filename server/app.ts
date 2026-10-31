@@ -5,6 +5,8 @@ import { z } from "zod";
 import { Engine, type Session } from "./engine.ts";
 import { Problem } from "./provider.ts";
 import { agentInput, observeInput } from "../shared/agent.ts";
+import { TtsStream } from "./tts-stream.ts";
+import { getServerVoice } from "./tts-kokoro.ts";
 
 export const cookieToken = (header = "") =>
   header
@@ -100,7 +102,10 @@ export function handleVoiceSocket(
   };
   const fail = (error: unknown) => {
     if (error instanceof Problem) {
-      console.warn(`[glint-voice] request failed: ${error.code}`);
+      // CANCELED is routine supersede churn (barge-in, epoch turnover).
+      if (error.code === "CANCELED")
+        console.debug("[glint-voice] request canceled");
+      else console.warn(`[glint-voice] request failed: ${error.code}`);
       send({ type: "error", code: error.code, message: error.message });
     } else if (error instanceof z.ZodError) {
       console.warn("[glint-voice] request failed: INVALID_INPUT");
@@ -348,16 +353,47 @@ export function createApp(engine: Engine, origin: string, production = false) {
       const emit = (event: unknown) => {
         if (!res.destroyed) res.write(`data: ${JSON.stringify(event)}\n\n`);
       };
+      // The neural voice loads beside the LLM stream so cold starts never
+      // delay text; early deltas buffer until the voice announces itself.
+      let tts: TtsStream | null = null;
+      let buffered = "";
       res.on("close", () => {
+        tts?.cancel();
         if (!finished && session.epoch === input.epoch)
           engine.phase(session, "paused");
       });
       try {
-        const reply = await engine.converse(session, input, (text) =>
-          emit({ type: "delta", text }),
-        );
+        const replyPromise = engine.converse(session, input, (text) => {
+          emit({ type: "delta", text });
+          if (tts) tts.push(text);
+          else buffered += text;
+        });
+        if (input.voice === "neural") {
+          const voice = await getServerVoice();
+          if (voice && !res.destroyed) {
+            tts = new TtsStream(
+              voice,
+              (event) => emit(event),
+              {
+                onTiming: (ms, chars) =>
+                  console.info(
+                    `[glint-timing] ${JSON.stringify({ scope: "server", lane: "tts", ms, chars })}`,
+                  ),
+              },
+            );
+            tts.announce();
+            tts.push(buffered);
+            buffered = "";
+          } else emit({ type: "voice", mode: "none" });
+        }
+        const reply = await replyPromise;
         emit({ type: "done", reply });
+        if (tts) {
+          await tts.finish();
+          emit({ type: "voice-done" });
+        }
       } catch (error) {
+        tts?.cancel();
         emit({
           type: "error",
           message:

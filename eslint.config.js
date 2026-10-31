@@ -7,6 +7,7 @@ export default ts.config(
       "node_modules/**",
       "docs/assets/**",
       "test-results/**",
+      ".tmp-test/**",
       "visual-proof/**",
       "public/vision/runtime/**",
       ".data/**",

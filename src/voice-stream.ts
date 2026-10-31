@@ -104,11 +104,15 @@ export class StreamTurns {
     this.pending = null;
   }
 }
+const MAX_PREOPEN_BYTES = 144000;
 export class VoiceClient {
   private socket: VoiceClientSocket | null = null;
   private queue: (string | Uint8Array)[] = [];
   private ready = false;
   private dead = false;
+  private streamOpen = false;
+  private preOpen: Uint8Array[] = [];
+  private preOpenBytes = 0;
   constructor(
     private url: string,
     private events: VoiceClientEvents,
@@ -136,21 +140,42 @@ export class VoiceClient {
     });
   }
   open(epoch: number, requestId: string = crypto.randomUUID()) {
+    this.streamOpen = false;
+    this.preOpen = [];
+    this.preOpenBytes = 0;
     this.send(JSON.stringify({ type: "open", epoch, requestId }));
   }
   audio(pcm: Uint8Array) {
+    if (!this.streamOpen) {
+      while (
+        this.preOpen.length &&
+        this.preOpenBytes + pcm.length > MAX_PREOPEN_BYTES
+      )
+        this.preOpenBytes -= this.preOpen.shift()!.length;
+      this.preOpen.push(pcm);
+      this.preOpenBytes += pcm.length;
+      return;
+    }
     this.send(pcm);
   }
   end() {
     this.send(JSON.stringify({ type: "end" }));
+    this.streamOpen = false;
+    this.preOpen = [];
+    this.preOpenBytes = 0;
   }
   closeStream() {
     this.send(JSON.stringify({ type: "close" }));
+    this.streamOpen = false;
+    this.preOpen = [];
+    this.preOpenBytes = 0;
   }
   dispose() {
     if (this.dead) return;
     this.dead = true;
     this.queue = [];
+    this.preOpen = [];
+    this.preOpenBytes = 0;
     this.socket?.close();
     this.socket = null;
   }
@@ -177,9 +202,15 @@ export class VoiceClient {
     const text = record.text,
       transcript = record.transcript;
     switch (record.type) {
-      case "opened":
+      case "opened": {
+        this.streamOpen = true;
+        const held = this.preOpen;
+        this.preOpen = [];
+        this.preOpenBytes = 0;
+        for (const pcm of held) this.send(pcm);
         this.events.onOpened();
         return;
+      }
       case "partial":
         if (typeof text === "string") {
           this.events.onPartial(text);

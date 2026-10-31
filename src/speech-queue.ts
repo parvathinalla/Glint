@@ -1,5 +1,17 @@
+import { cleanSpeakText } from "../shared/speak-clean.ts";
 /** Speak completed phrases while the remainder of the model response streams. */
 const MAX_PHRASE = 200;
+/**
+ * Chunked utterances add one scheduling gap per boundary, so chunk only on
+ * iOS, where long utterances stall or truncate. Read lazily so tests can stub
+ * the user agent per case.
+ */
+function needsChunks(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    /iPhone|iPad|iPod/.test(navigator.userAgent ?? "")
+  );
+}
 function chunk(text: string): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   const parts: string[] = [];
@@ -19,6 +31,7 @@ export class SpeechQueue {
   private queue: string[] = [];
   private active = false;
   private generation = 0;
+  private paused = false;
   private voices: SpeechSynthesisVoice[] = [];
   private voicesArmed = false;
   constructor(
@@ -72,19 +85,36 @@ export class SpeechQueue {
     this.pump();
   }
   private enqueue(raw: string) {
-    const clean = raw
-      .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1")
-      .replace(/[*#`]/g, "")
-      .trim();
-    if (clean) this.queue.push(...chunk(clean));
+    const clean = cleanSpeakText(raw);
+    if (clean) this.queue.push(...(needsChunks() ? chunk(clean) : [clean]));
   }
   cancel() {
     this.generation++;
     this.queue = [];
     this.buffer = "";
     this.active = false;
+    this.paused = false;
     window.speechSynthesis?.cancel();
     this.changed(false);
+  }
+  /**
+   * Halt audible speech instantly but keep the unheard queue for a possible
+   * resume, for barge-ins that may still prove to be speaker echo. Reports no
+   * speaking change; the caller resolves with resume() or cancel().
+   */
+  softStop() {
+    this.generation++;
+    if (this.buffer.trim()) this.enqueue(this.buffer);
+    this.buffer = "";
+    this.active = false;
+    this.paused = this.queue.length > 0;
+    window.speechSynthesis?.cancel();
+  }
+  /** Resume a softStop() when the interruption proved to be echo. */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.pump();
   }
   private pump() {
     if (this.active || !this.queue.length || !("speechSynthesis" in window))

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 import AxeBuilder from "@axe-core/playwright";
 test("welcome, source confirmation, replay, progress, and alternate order", async ({
   page,
@@ -144,12 +144,13 @@ test("BYOK field and truthful capability disclosure without calling the provider
       .locator(".provider-choice, .disclosure, .billing-note"),
   ).toHaveCount(0);
   await page.locator("#provider-key").fill("TEST_ONLY_NOT_SUBMITTED");
-  expect(
-    await page.evaluate(() => ({
-      local: { ...localStorage },
-      session: { ...sessionStorage },
-    })),
-  ).toEqual({ local: {}, session: {} });
+  const stored = await page.evaluate(() => ({
+    local: { ...localStorage },
+    session: { ...sessionStorage },
+  }));
+  expect(stored.session).toEqual({});
+  expect(stored.local).toEqual({ "glint-key-gate": "1" });
+  expect(JSON.stringify(stored)).not.toContain("TEST_ONLY_NOT_SUBMITTED");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });

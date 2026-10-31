@@ -57,6 +57,7 @@ export const agentInput = z
     capturedAt: z.number().optional(),
     frames: z.array(videoFrame).min(1).max(6).optional(),
     events: z.array(visualEvent).max(4).optional(),
+    voice: z.enum(["neural", "off"]).optional(),
   })
   .refine(
     (input) => !(input.image && input.frames?.length),

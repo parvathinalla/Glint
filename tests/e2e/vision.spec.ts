@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixture";
 import { readFileSync } from "node:fs";
 test.use({ reducedMotion: "reduce" });
 
@@ -47,7 +47,7 @@ test("real local pose worker loads and detects the attributed public sample", as
   expect(count).toBe(33);
 });
 
-test("camera observes activity without a question, reacts to a hand, and sends frame history with questions", async ({
+test("camera observes silently without a question and sends frame history with questions", async ({
   page,
   context,
 }) => {
@@ -167,16 +167,15 @@ test("camera observes activity without a question, reacts to a hand, and sends f
   await expect(
     page.getByText("Seeing: stirring ingredients in a bowl", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toBeVisible();
+  await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toHaveCount(0);
+  const seenBefore = observations;
   await page.evaluate(() => {
     (window as unknown as { raised: boolean }).raised = true;
   });
-  await expect(
-    page.getByText(
-      "Hi! I saw you raise your hand.",
-      { exact: true },
-    ),
-  ).toBeVisible({ timeout: 10000 });
+  await expect.poll(() => observations, { timeout: 15000 }).toBeGreaterThan(seenBefore);
+  await page.waitForTimeout(1000);
+  await expect(page.getByText("Hi! I saw you raise your hand.", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toHaveCount(0);
   await page.getByLabel("Message Glint").fill("What am I doing?");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(

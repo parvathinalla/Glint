@@ -19,13 +19,18 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { Spark } from "./Art.tsx";
 import { asDataUrl, useCamera, encodeCameraFrames } from "./camera.ts";
 import { useVisualAwareness } from "./visual-awareness.ts";
 import type { VisualEvent } from "../shared/visual-events.ts";
+import {
+  COMPLETE_END_SILENCE_MS,
+  isTurnComplete,
+  isTurnContinuation,
+} from "../shared/voice-turn.ts";
 import { useMicrophone } from "./microphone.ts";
 import { streamAgent } from "./agent-stream.ts";
 import { SpeechQueue } from "./speech-queue.ts";
+import { VoicePlayer, isNeuralVoiceEnabled } from "./voice-player.ts";
 import { BargeGuard } from "./barge-guard.ts";
 import {
   StreamTurns,
@@ -33,6 +38,24 @@ import {
   isStreamingVoiceEnabled,
 } from "./voice-stream.ts";
 import { isEchoTranscript } from "./echo.ts";
+import {
+  SPEAKER_MIN_SECONDS,
+  SpeakerCheckQueue,
+  SpeakerEmbedder,
+  averageVoiceprint,
+  captureEnrollmentSample,
+  clearVoiceprint,
+  cosineSimilarity,
+  isSpeakerLockEnabled,
+  loadVoiceprint,
+  resampleLinear,
+  sampleHasSpeech,
+  saveVoiceprint,
+  verifyScore,
+  wavBytesToMono16k,
+  type SpeakerVerdict,
+  type Voiceprint,
+} from "./speaker-id.ts";
 import {
   loadSubtitlesEnabled,
   saveSubtitlesEnabled,
@@ -62,11 +85,10 @@ type Message = {
   note?: string;
   snapshot?: AgentReply["snapshot"];
 };
-/** Attached when a turn falls back to the WAV upload, so the fallback is never silent. */
-const VOICE_FALLBACK_NOTE =
-  "Sent as a voice recording (live transcription unavailable).";
 const voiceStreamUrl = () =>
   `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/voice-stream`;
+/** Speech-start confirmation delay before server invalidation (stops pop churn). */
+const BARGE_CONFIRM_MS = 300;
 export function CompanionHome({
   view,
   online,
@@ -100,10 +122,7 @@ export function CompanionHome({
     [awareness, setAwareness] = useState<VisualObservation | null>(null),
     [visionPaused, setVisionPaused] = useState(false);
   const visualJob = useRef(false),
-    nextObservation = useRef(0),
-    lastAutomaticSpeech = useRef(0);
-  const lastModelSpeech = useRef(0),
-    greetedOnCamera = useRef(false);
+    nextObservation = useRef(0);
   const eventHistory = useRef<CameraEvent[]>([]);
   const pendingVisualEvent = useRef<{ event: VisualEvent; at: number } | null>(
     null,
@@ -111,6 +130,21 @@ export function CompanionHome({
   const [messages, setMessages] = useState<Message[]>([]),
     [question, setQuestion] = useState("");
   const [partial, setPartial] = useState("");
+  const [mlVadNote, setMlVadNote] = useState("");
+  const [voiceNote, setVoiceNote] = useState("");
+  const [speakerNote, setSpeakerNote] = useState("");
+  const [voiceprint, setVoiceprint] = useState<Voiceprint | null>(() =>
+    isSpeakerLockEnabled() ? loadVoiceprint() : null,
+  );
+  const [enrolling, setEnrolling] = useState<{
+    sample: number;
+    total: number;
+  } | null>(null);
+  const speaker = useRef<SpeakerEmbedder | null>(null),
+    speakerChecks = useRef(new SpeakerCheckQueue()),
+    enrollCancel = useRef(false),
+    enrollingRef = useRef(false),
+    speakerNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [subtitle, setSubtitle] = useState("");
   const [subsOn, setSubsOn] = useState(loadSubtitlesEnabled);
@@ -133,6 +167,9 @@ export function CompanionHome({
     streamingMode = useRef(false);
   const scroll = useRef<HTMLDivElement>(null);
   const speech = useRef<SpeechQueue | null>(null);
+  const voicePlayer = useRef<VoicePlayer | null>(null);
+  const neuralReply = useRef(false);
+  const replyDone = useRef(false);
   const pendingVoice = useRef<{
     capturedStartMs: number;
     asrFirstPartialMs?: number;
@@ -141,16 +178,153 @@ export function CompanionHome({
   const activeVoice = useRef<VoiceTurnTiming | null>(null);
   const bargeGuard = useRef<BargeGuard | null>(null);
   if (!bargeGuard.current) bargeGuard.current = new BargeGuard();
+  const bargeAlive = useRef(false);
+  const bargeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markSpoken = (phrase: string) => {
+    bargeGuard.current?.markSpoke();
+    const timing = activeVoice.current;
+    if (timing && timing.playbackStartMs === undefined)
+      timing.playbackStartMs = Date.now();
+    setSubtitle(phrase);
+  };
   if (!speech.current)
-    speech.current = new SpeechQueue(setSpeaking, (phrase) => {
-      bargeGuard.current?.markSpoke();
-      const timing = activeVoice.current;
-      if (timing && timing.playbackStartMs === undefined)
-        timing.playbackStartMs = Date.now();
-      setSubtitle(phrase);
-    });
+    speech.current = new SpeechQueue(setSpeaking, markSpoken);
+  if (!voicePlayer.current)
+    voicePlayer.current = new VoicePlayer(setSpeaking, markSpoken);
   const pause = useRef<Promise<void> | null>(null);
-  const stopSpeech = useCallback(() => speech.current?.cancel(), []);
+  const stopSpeech = useCallback((soft = false) => {
+    if (soft) {
+      speech.current?.softStop();
+      voicePlayer.current?.softStop();
+    } else {
+      speech.current?.cancel();
+      voicePlayer.current?.cancel();
+    }
+  }, []);
+  const noteSpeaker = useCallback((text: string, sticky = false) => {
+    if (speakerNoteTimer.current) {
+      clearTimeout(speakerNoteTimer.current);
+      speakerNoteTimer.current = null;
+    }
+    if (text) console.info(`[glint-voice] speaker lock: ${text}`);
+    setSpeakerNote(text);
+    if (text && !sticky)
+      speakerNoteTimer.current = setTimeout(() => setSpeakerNote(""), 8000);
+  }, []);
+  const ensureSpeaker = () => {
+    if (!speaker.current)
+      speaker.current = new SpeakerEmbedder((reason) => {
+        const detail = String(reason).slice(0, 90);
+        noteSpeaker(
+          `Speaker lock unavailable (${detail}); answering everyone.`,
+          true,
+        );
+      });
+    return speaker.current;
+  };
+  /**
+   * Start an async owner/stranger check for one turn's audio. Runs beside
+   * transcription (never ahead of it), so the owner never waits; short
+   * turns, decode failures, and a missing lock all resolve null (allow).
+   */
+  function startSpeakerCheck(audio: Blob, voicedMs: number) {
+    if (!isSpeakerLockEnabled()) return;
+    const enrolled = loadVoiceprint();
+    if (!enrolled) return;
+    if (voicedMs < SPEAKER_MIN_SECONDS * 1000) {
+      // Backchannel ("mm", "yes"): too little voice to verify, so allow
+      // without consulting the model. The resolved check keeps FIFO order
+      // aligned for streamed sends.
+      speakerChecks.current.push(audio, Promise.resolve(null));
+      return;
+    }
+    const promise = (async (): Promise<SpeakerVerdict | null> => {
+      try {
+        const bytes = new Uint8Array(await audio.arrayBuffer()),
+          { samples } = wavBytesToMono16k(bytes);
+        const embedding = await ensureSpeaker().embed(samples);
+        if (!embedding) return null;
+        const score = cosineSimilarity(embedding, enrolled.vector),
+          verdict = verifyScore(score);
+        console.info(
+          `[glint-voice] speaker check: ${verdict} (score ${score.toFixed(2)})`,
+        );
+        return verdict;
+      } catch {
+        return null;
+      }
+    })();
+    speakerChecks.current.push(audio, promise);
+  }
+  const ENROLL_SAMPLES = 2,
+    ENROLL_SECONDS = 4,
+    ENROLL_PROMPTS = [
+      "Say: “Hey Glint, this is me.”",
+      "Say: “Remember my voice.”",
+    ];
+  async function enrollVoice() {
+    if (enrollingRef.current) return;
+    enrollingRef.current = true;
+    enrollCancel.current = false;
+    const vectors: Float32Array[] = [];
+    try {
+      const embedder = ensureSpeaker();
+      for (let sample = 0; sample < ENROLL_SAMPLES; sample++) {
+        setEnrolling({ sample: sample + 1, total: ENROLL_SAMPLES });
+        const { samples, sampleRate } =
+          await captureEnrollmentSample(ENROLL_SECONDS);
+        if (enrollCancel.current) return;
+        const wave = resampleLinear(samples, sampleRate, 16000);
+        if (!sampleHasSpeech(wave, 16000)) {
+          noteSpeaker(
+            "We couldn't hear you clearly — move closer and try again.",
+          );
+          return;
+        }
+        const embedding = await embedder.embed(wave);
+        if (enrollCancel.current) return;
+        if (!embedding) {
+          noteSpeaker("Speaker lock unavailable; try again later.", true);
+          return;
+        }
+        vectors.push(embedding);
+      }
+      setVoiceprint(saveVoiceprint(averageVoiceprint(vectors), vectors.length));
+      noteSpeaker("");
+    } catch (error) {
+      noteSpeaker(
+        error instanceof Error &&
+          (error.name === "NotAllowedError" || error.name === "NotFoundError")
+          ? "Microphone blocked — allow access to enroll your voice."
+          : "Enrollment failed; try again.",
+      );
+    } finally {
+      enrollingRef.current = false;
+      setEnrolling(null);
+    }
+  }
+  const wakeLock = useRef<{ release: () => Promise<void> } | null>(null);
+  function holdWakeLock() {
+    const request = (
+      navigator as Navigator & {
+        wakeLock?: {
+          request: (kind: "screen") => Promise<{
+            release: () => Promise<void>;
+          }>;
+        };
+      }
+    ).wakeLock?.request;
+    if (!request) return;
+    request("screen")
+      .then((sentinel) => {
+        wakeLock.current = sentinel;
+      })
+      .catch(() => undefined);
+  }
+  function releaseWakeLock() {
+    wakeLock.current?.release().catch(() => undefined);
+    wakeLock.current = null;
+  }
   async function send(
     text: string,
     instructionsUrl?: string,
@@ -159,22 +333,74 @@ export function CompanionHome({
   ) {
     if (lock.current) {
       if (visualJob.current) await interrupt(false);
-      else return;
+      else {
+        // Swallowed turn: drop its speaker check so it can never judge a
+        // later turn (exact claim — other turns' checks are untouched).
+        if (voiceInput) speakerChecks.current.claim(voiceInput.audio);
+        return;
+      }
     }
     if (!current.current.key.connected) {
       connect();
       return;
     }
+    if (request.current) {
+      generation.current++;
+      request.current.abort();
+      request.current = null;
+      setMessages((items) =>
+        items.map((item) =>
+          item.streaming ? { ...item, streaming: false } : item,
+        ),
+      );
+    }
+    replyDone.current = false;
     const controller = new AbortController(),
       token = generation.current;
     request.current = controller;
     lock.current = true;
+    const speakerCheck = voiceInput
+      ? speakerChecks.current.claim(voiceInput.audio)
+      : null;
+    let deferredSpeechCancel = false;
+    if (speakerCheck && speakerCheck.settled === undefined)
+      void speakerCheck.promise.then((verdict) => {
+        if (verdict !== "stranger") return;
+        if (token !== generation.current || request.current !== controller)
+          return;
+        // A stranger's turn, proven mid-flight: kill it. Before the first
+        // reply token the interrupted speech is still preserved, so it
+        // resumes like any false trigger; after, stop the partial reply.
+        activeVoice.current = null;
+        if (deferredSpeechCancel) {
+          deferredSpeechCancel = false;
+          cancelWork(true);
+          speech.current?.resume();
+
+          voicePlayer.current?.resume();
+        } else cancelWork();
+        setMessages((items) => {
+          for (let i = items.length - 1; i >= 0; i--)
+            if (items[i].who === "you" && items[i].text === text) {
+              const next = [...items];
+              next[i] = {
+                ...next[i],
+                note: "Ignored — that voice didn't match the owner.",
+              };
+              return next;
+            }
+          return items;
+        });
+        noteSpeaker("Ignored — that voice didn't match the owner.");
+      });
     let epoch = current.current.epoch;
     setBusy(true);
     setResearching(!!instructionsUrl);
     setProblem("");
     setFailed(null);
-    stopSpeech();
+    // Soft-stop first: the turn may still prove to be speaker echo, in
+    // which case the preserved queue resumes instead of being destroyed.
+    stopSpeech(true);
     let echoSuspect = false;
     if (voiceInput) {
       activeVoice.current = {
@@ -190,9 +416,33 @@ export function CompanionHome({
       pendingVoice.current = null;
     }
     try {
+      if (speakerCheck?.settled === "stranger") {
+        // Proven before transcription: skip the server call entirely and
+        // resume any interrupted reply, like the echo verdict below.
+        speech.current?.resume();
+
+        voicePlayer.current?.resume();
+        activeVoice.current = null;
+        noteSpeaker("Ignored — that voice didn't match the owner.");
+        return;
+      }
       if (pause.current) await pause.current;
       if (controller.signal.aborted || token !== generation.current) return;
       epoch = current.current.epoch;
+      const sampleFrames = withImage
+        ? (async () => {
+            let frame = await camera.sample();
+            if (!frame) {
+              await new Promise((resolve) => setTimeout(resolve, 80));
+              frame = await camera.sample();
+            }
+            if (!frame) return null;
+            return {
+              frames: await encodeCameraFrames(camera.recent()),
+              capturedAt: frame.at,
+            };
+          })()
+        : null;
       if (voiceInput?.audio) {
         const encoded = (await asDataUrl(voiceInput.audio)).split(",")[1];
         const result = (await api(
@@ -211,6 +461,15 @@ export function CompanionHome({
         if (activeVoice.current)
           activeVoice.current.asrFinalMs = Date.now();
       }
+      if (voiceInput?.audio && !text.trim()) {
+        // Transcribed nothing (a pop or fragment Meta heard no speech in):
+        // resume any interrupted reply instead of answering silence.
+        speech.current?.resume();
+
+        voicePlayer.current?.resume();
+        activeVoice.current = null;
+        return;
+      }
       if (voiceInput && echoSuspect && !instructionsUrl) {
         const glint = messages
           .filter((item) => item.who === "glint")
@@ -220,22 +479,28 @@ export function CompanionHome({
           // Speaker echo, not the user: answer nothing and keep it out of
           // the timing baseline. Fail-open — a real turn is never dropped
           // for a missing speech flag.
+          speech.current?.resume();
+
+          voicePlayer.current?.resume();
           activeVoice.current = null;
           return;
         }
       }
+      // Genuine turn (or typed send): drop any preserved speech for good —
+      // unless a speaker check is still pending, in which case the drop
+      // waits for the first reply token so a stranger verdict can still
+      // resume the interrupted reply.
+      if (speakerCheck && speakerCheck.settled === undefined)
+        deferredSpeechCancel = true;
+      else stopSpeech();
       let image: string | undefined,
         capturedAt: number | undefined,
         frames: VideoFrame[] | undefined;
-      if (withImage) {
-        let frame = await camera.sample();
-        if (!frame) {
-          await new Promise((resolve) => setTimeout(resolve, 80));
-          frame = await camera.sample();
-        }
-        if (frame) {
-          frames = await encodeCameraFrames(camera.recent());
-          capturedAt = frame.at;
+      if (sampleFrames) {
+        const sampled = await sampleFrames;
+        if (sampled) {
+          frames = sampled.frames;
+          capturedAt = sampled.capturedAt;
         } else
           setProblem(
             "The camera is still preparing. Glint will answer without an image for this turn.",
@@ -257,6 +522,9 @@ export function CompanionHome({
             ].slice(-20) as Message[]),
       );
       let streamed = false;
+      neuralReply.current = false;
+      setVoiceNote("");
+      delete document.body.dataset.voiceMode;
       const result = await streamAgent(
         current.current.csrf,
         {
@@ -272,10 +540,15 @@ export function CompanionHome({
           capturedAt,
           epoch,
           model: model || current.current.key.models[0],
+          voice: isNeuralVoiceEnabled() ? "neural" : "off",
           requestId: crypto.randomUUID(),
         },
         controller.signal,
         (delta) => {
+          if (deferredSpeechCancel) {
+            deferredSpeechCancel = false;
+            stopSpeech();
+          }
           if (
             controller.signal.aborted ||
             token !== generation.current ||
@@ -300,12 +573,52 @@ export function CompanionHome({
               },
             ].slice(-20) as Message[];
           });
-          if (aloud.current) speech.current?.push(delta);
+          if (aloud.current && !neuralReply.current) speech.current?.push(delta);
         },
         () => {
           const timing = activeVoice.current;
           if (timing && timing.modelFirstTokenMs === undefined)
             timing.modelFirstTokenMs = Date.now();
+        },
+        (mode) => {
+          neuralReply.current = mode === "neural";
+          document.body.dataset.voiceMode = mode;
+          setVoiceNote(
+            mode === "neural"
+              ? "Neural voice on · waiting for audio"
+              : "Device voice (neural unavailable)",
+          );
+        },
+        (event) => {
+          if (
+            controller.signal.aborted ||
+            token !== generation.current ||
+            epoch !== current.current.epoch
+          )
+            return;
+          if (event.type === "audio") {
+            voicePlayer.current?.playAudio(event);
+            const state = voicePlayer.current?.getState();
+            setVoiceNote(
+              state?.ctx !== "running"
+                ? "Audio paused by browser · tap here to resume"
+                : `Neural voice · sentence ${event.seq + 1}`,
+            );
+          } else {
+            voicePlayer.current?.audioError(event.text);
+            setVoiceNote(`Neural voice · device fallback (sentence ${event.seq + 1})`);
+          }
+        },
+        () => {
+          if (
+            aloud.current &&
+            !controller.signal.aborted &&
+            token === generation.current
+          )
+            voicePlayer.current?.finish();
+        },
+        () => {
+          replyDone.current = true;
         },
       );
       if (
@@ -325,11 +638,16 @@ export function CompanionHome({
           ? [...items.slice(0, -1), final]
           : [...items, final].slice(-20);
       });
-      greetedOnCamera.current = true;
       if (instructionsUrl) closeLink();
       if (aloud.current) {
+        // Non-streamed completion with a pending check: drop preserved
+        // speech before push()/finish() can pump it (empty replies).
+        if (deferredSpeechCancel) {
+          deferredSpeechCancel = false;
+          stopSpeech();
+        }
         if (!streamed) speech.current?.push(result.message);
-        speech.current?.finish();
+        if (!neuralReply.current) speech.current?.finish();
       }
     } catch (error) {
       if (!controller.signal.aborted && token === generation.current) {
@@ -353,6 +671,7 @@ export function CompanionHome({
         );
       }
     } finally {
+      if (deferredSpeechCancel && token === generation.current) stopSpeech();
       if (voiceInput && activeVoice.current) {
         logTiming(activeVoice.current);
         activeVoice.current = null;
@@ -367,18 +686,31 @@ export function CompanionHome({
   }
   const sendRef = useRef(send);
   sendRef.current = send;
+  function openLaneForTurn() {
+    if (!streamingMode.current) return;
+    const flush = turns.current.started();
+    if (flush) {
+      voice.current?.closeStream();
+      void send("", undefined, camera.active, { audio: flush });
+    }
+    setPartial("");
+    if (voice.current) voice.current.open(current.current.epoch);
+    else turns.current.streamFailed();
+  }
   const mic = useMicrophone(
-    (audio) => {
+    (audio, stats) => {
       if (bargeGuard.current?.turnReady()) return;
       if (streamingMode.current) {
         const decision = turns.current.wavReady(audio);
-        if (decision === "fallback")
-          void send("", undefined, camera.active, {
-            audio,
-            note: VOICE_FALLBACK_NOTE,
-          });
+        // Dropped turns send nothing and get no check; the rest verify.
+        if (decision === "fallback") {
+          startSpeakerCheck(audio, stats.voicedMs);
+          void send("", undefined, camera.active, { audio });
+        } else if (decision === "store")
+          startSpeakerCheck(audio, stats.voicedMs);
         return;
       }
+      startSpeakerCheck(audio, stats.voicedMs);
       void send("", undefined, camera.active, { audio });
     },
     onProblem,
@@ -388,38 +720,43 @@ export function CompanionHome({
         capturedStartMs: Date.now(),
         duringSpeech: speaking,
       };
-      if (streamingMode.current) {
-        const flush = turns.current.started();
-        if (flush) {
-          voice.current?.closeStream();
-          void send("", undefined, camera.active, {
-            audio: flush,
-            note: VOICE_FALLBACK_NOTE,
-          });
-        }
-        setPartial("");
-        if (voice.current) voice.current.open(current.current.epoch);
-        else turns.current.streamFailed();
+      bargeAlive.current = true;
+      if (!(lock.current || speaking)) {
+        openLaneForTurn();
+        return;
       }
-      if (lock.current || speaking) {
-        const timing = activeVoice.current;
-        if (
-          timing &&
-          timing.playbackStartMs !== undefined &&
-          timing.bargeDetectMs === undefined
-        )
-          timing.bargeDetectMs = Date.now();
-        void interrupt(false);
-        // interrupt() cancels local speech synchronously, so this mark lands
-        // right after the playback stop it measures.
-        const stopped = activeVoice.current;
-        if (
-          stopped &&
-          stopped.bargeDetectMs !== undefined &&
-          stopped.playbackStopMs === undefined
-        )
-          stopped.playbackStopMs = Date.now();
-      }
+      const timing = activeVoice.current;
+      if (
+        timing &&
+        timing.playbackStartMs !== undefined &&
+        timing.bargeDetectMs === undefined
+      )
+        timing.bargeDetectMs = Date.now();
+      // Soft-stop: the burst may still prove to be speaker echo, so the
+      // unheard queue is preserved until the transcript verdict.
+      cancelWork(true);
+      // cancelWork() stops local speech synchronously, so this mark lands
+      // right after the playback stop it measures.
+      const stopped = activeVoice.current;
+      if (
+        stopped &&
+        stopped.bargeDetectMs !== undefined &&
+        stopped.playbackStopMs === undefined
+      )
+        stopped.playbackStopMs = Date.now();
+      // Server invalidation waits for confirmation: only a turn still
+      // alive after the delay invalidates the epoch and opens the lane,
+      // so pops and noise bursts never churn the session.
+      if (bargeTimer.current) clearTimeout(bargeTimer.current);
+      bargeTimer.current = setTimeout(() => {
+        bargeTimer.current = null;
+        if (!bargeAlive.current) return;
+        void (async () => {
+          await pauseServer(false);
+          if (!bargeAlive.current) return;
+          openLaneForTurn();
+        })();
+      }, BARGE_CONFIRM_MS);
     },
     speaking,
     {
@@ -428,17 +765,58 @@ export function CompanionHome({
         if (turns.current.shouldEnd()) voice.current?.end();
       },
     },
+    {
+      endSilenceMs: () =>
+        isTurnComplete(partial)
+          ? COMPLETE_END_SILENCE_MS
+          : streamingMode.current
+            ? 500
+            : 850,
+      shouldExtend: () => isTurnContinuation(partial),
+      onMlStatus: (ready, reason) => {
+        if (ready) {
+          setMlVadNote("");
+      setVoiceNote("");
+          return;
+        }
+        const detail = String(reason ?? "unknown").slice(0, 90);
+        console.warn(`[glint-voice] neural VAD unavailable: ${detail}`);
+        setMlVadNote(
+          `Neural voice detection unavailable (${detail}); using basic detection.`,
+        );
+      },
+      onSpeechEnd: (turnSent) => {
+        bargeAlive.current = false;
+        // A dropped burst produced no audio and sends nothing, so it must
+        // not kill the reply: resume where the soft-stop paused. Sent turns
+        // resolve through the echo verdict in send() instead.
+        if (!turnSent) {
+          speech.current?.resume();
+          voicePlayer.current?.resume();
+        }
+        if (bargeTimer.current) {
+          clearTimeout(bargeTimer.current);
+          bargeTimer.current = null;
+        }
+      },
+    },
   );
-  const cancelWork = useCallback(() => {
-    generation.current++;
-    request.current?.abort();
-    request.current = null;
-    lock.current = false;
-    visualJob.current = false;
+  const cancelWork = useCallback((softSpeech = false) => {
+    // A soft barge during the post-text audio drain must not abort the
+    // stream: echo and dropped bursts resume it, and only a genuine new
+    // turn (see send()) supersedes the drain.
+    if (!(softSpeech && replyDone.current)) {
+      generation.current++;
+      request.current?.abort();
+      request.current = null;
+      lock.current = false;
+      visualJob.current = false;
+    }
     setObserving(false);
     setBusy(false);
     setResearching(false);
-    stopSpeech();
+    stopSpeech(softSpeech);
+    if (softSpeech) return;
     setMessages((items) =>
       items.map((item) =>
         item.streaming
@@ -454,6 +832,9 @@ export function CompanionHome({
   function interrupt(endVoice: boolean, clearVision = false) {
     if (endVoice) mic.cancel();
     cancelWork();
+    return pauseServer(clearVision);
+  }
+  function pauseServer(clearVision = false) {
     const operation = api(
       clearVision ? "vision/stop" : "phase",
       clearVision ? {} : { phase: "paused" },
@@ -494,35 +875,7 @@ export function CompanionHome({
       speaking
     )
       return;
-    const event = pendingVisualEvent.current;
-    if (event?.event === "person-entered" && greetedOnCamera.current)
-      pendingVisualEvent.current = null;
-    if (
-      event &&
-      !(event.event === "person-entered" && greetedOnCamera.current) &&
-      Date.now() - event.at < 8000 &&
-      Date.now() - lastAutomaticSpeech.current > 2500
-    ) {
-      pendingVisualEvent.current = null;
-      const text =
-        event.event === "hand-raised"
-          ? "Hi! I saw you raise your hand."
-          : "Hi! I can see you.";
-      setMessages(
-        (items) => [...items, { who: "glint", text }].slice(-20) as Message[],
-      );
-      if (aloud.current && mic.enabled) {
-        speech.current?.push(text);
-        speech.current?.finish();
-      }
-      lastAutomaticSpeech.current = Date.now();
-      greetedOnCamera.current = true;
-      nextObservation.current = Math.max(
-        nextObservation.current,
-        Date.now() + 1500,
-      );
-      return;
-    }
+    pendingVisualEvent.current = null;
     if (visionPaused || Date.now() < nextObservation.current) return;
     const recent = camera.recent();
     if (recent.length < 2) return;
@@ -570,26 +923,6 @@ export function CompanionHome({
         frameCount: frames.length,
       });
       setAwareness(result);
-      if (
-        result.say &&
-        result.confidence !== "low" &&
-        Date.now() - lastModelSpeech.current >= 8000 &&
-        Date.now() - result.capturedAt < 12000
-      ) {
-        setMessages(
-          (items) =>
-            [...items, { who: "glint", text: result.say! }].slice(
-              -20,
-            ) as Message[],
-        );
-        if (aloud.current && mic.enabled) {
-          speech.current?.push(result.say);
-          speech.current?.finish();
-        }
-        lastAutomaticSpeech.current = Date.now();
-        lastModelSpeech.current = Date.now();
-        greetedOnCamera.current = true;
-      }
     } catch (error) {
       if (!controller.signal.aborted && token === generation.current) {
         setVisionPaused(true);
@@ -613,8 +946,6 @@ export function CompanionHome({
     setVisionPaused(false);
     pendingVisualEvent.current = null;
     eventHistory.current = [];
-    greetedOnCamera.current = messages.length > 0;
-    lastModelSpeech.current = 0;
     nextObservation.current = Date.now() + 3200;
     if (!camera.active) return;
     const timer = setInterval(() => void observationTick.current(), 800);
@@ -627,20 +958,35 @@ export function CompanionHome({
       streamingMode.current = false;
       turns.current.reset();
       setPartial("");
+      bargeAlive.current = false;
+      if (bargeTimer.current) {
+        clearTimeout(bargeTimer.current);
+        bargeTimer.current = null;
+      }
+      releaseWakeLock();
+      setMlVadNote("");
+      speakerChecks.current.purge();
+      noteSpeaker("");
       return;
     }
+    holdWakeLock();
     if (!isStreamingVoiceEnabled()) return;
     streamingMode.current = true;
     const fallback = (audio: Blob) =>
-      void sendRef.current("", undefined, cameraActive.current, {
-        audio,
-        note: VOICE_FALLBACK_NOTE,
-      });
+      void sendRef.current("", undefined, cameraActive.current, { audio });
     const finishStreamed = (transcript: string) => {
       if (!turns.current.finalArrived()) return;
       setPartial("");
       voice.current?.closeStream();
-      if (!transcript.trim()) return;
+      if (!transcript.trim()) {
+        // No send runs for empty finals: discard this turn's check so it
+        // can never judge a later turn.
+        speakerChecks.current.claim();
+        speech.current?.resume();
+
+        voicePlayer.current?.resume();
+        return;
+      }
       void sendRef.current(transcript, undefined, cameraActive.current, {
         asrFinalMs: Date.now(),
       });
@@ -667,7 +1013,7 @@ export function CompanionHome({
         const answered = failStream();
         if (!answered && info.reason === "allowance-exhausted")
           setProblem(
-            "The 40-call session allowance is used. No more work was sent.",
+            "The 100-call session allowance is used. No more work was sent.",
           );
       },
       onError: (code, message) => {
@@ -687,6 +1033,12 @@ export function CompanionHome({
       client.dispose();
     };
   }, [mic.enabled]);
+  useEffect(
+    () => () => {
+      void speaker.current?.dispose();
+    },
+    [],
+  );
   useEffect(() => {
     const hide = () => {
       if (document.visibilityState === "hidden") {
@@ -752,9 +1104,6 @@ export function CompanionHome({
   }, [fullscreen]);
   return (
     <section className="companion-home" aria-label="Talk with Glint">
-      <div className="hero-avatar">
-        <Spark state={speaking ? "speaking" : busy ? "thinking" : "ready"} />
-      </div>
       <div className="companion-stage">
         <div className="companion-controls">
           <button
@@ -784,6 +1133,23 @@ export function CompanionHome({
                   ? "Voice on · listening"
                   : ""}
         </p>
+        {mic.enabled && mlVadNote && (
+          <p className="companion-ml-note">{mlVadNote}</p>
+        )}
+        {mic.enabled && voiceNote && (
+          <p
+            className="companion-voice-note"
+            onClick={() => {
+              speech.current?.unlock();
+              voicePlayer.current?.unlock();
+            }}
+          >
+            {voiceNote}
+          </p>
+        )}
+        {speakerNote && (
+          <p className="companion-speaker-note">{speakerNote}</p>
+        )}
         {partial && <p className="companion-partial">{partial}</p>}
         {(busy || speaking) && (
           <button className="text-button" onClick={() => void interrupt(false)}>
@@ -978,6 +1344,8 @@ export function CompanionHome({
               disabled={mic.preparing || !online}
               onClick={() => {
                 speech.current?.unlock();
+
+                voicePlayer.current?.unlock();
                 if (!view.key.connected) {
                   connect();
                   return;
@@ -1035,6 +1403,53 @@ export function CompanionHome({
           Voice listens until you end the chat. Glint replies aloud as the
           answer arrives.
         </p>
+        <div className="voice-lock-row">
+          {enrolling ? (
+            <p role="status">
+              Recording sample {enrolling.sample} of {enrolling.total}…{" "}
+              {ENROLL_PROMPTS[enrolling.sample - 1]}{" "}
+              <button
+                className="text-button"
+                // The progress clears when the flow actually exits (below),
+                // so a re-tap can never interleave two enrollments.
+                onClick={() => {
+                  enrollCancel.current = true;
+                }}
+              >
+                Cancel
+              </button>
+            </p>
+          ) : voiceprint ? (
+            <p>
+              Voice lock: On · answers only you{" "}
+              <button
+                className="text-button"
+                onClick={() => void enrollVoice()}
+              >
+                Re-teach
+              </button>{" "}
+              <button
+                className="text-button"
+                onClick={() => {
+                  clearVoiceprint();
+                  setVoiceprint(null);
+                }}
+              >
+                Turn off
+              </button>
+            </p>
+          ) : (
+            <p>
+              Voice lock: Off ·{" "}
+              <button
+                className="text-button"
+                onClick={() => void enrollVoice()}
+              >
+                Teach Glint your voice
+              </button>
+            </p>
+          )}
+        </div>
         <button
           className="text-button companion-example"
           aria-label="Try desk organizer example"

@@ -61,6 +61,8 @@ export type VoiceOptions = {
 };
 /** One client frame holds at most ~1.3 s of provider-native PCM. */
 export const MAX_VOICE_FRAME_BYTES = 64000;
+/** Paid provider dispatches allowed per session before APP_LIMIT. */
+export const MAX_SESSION_CALLS = 100;
 export class Engine {
   private sessions = new Map<string, Session>();
   constructor(
@@ -126,7 +128,7 @@ export class Engine {
         models: s.key?.models ?? [],
       },
       calls: s.calls,
-      limit: 40,
+      limit: MAX_SESSION_CALLS,
       busy: s.busy,
       provider: "Meta Model API",
       capabilities: {
@@ -333,11 +335,11 @@ export class Engine {
       );
     if (s.seen.has(requestId))
       throw new Problem(409, "DUPLICATE", "This request was already sent.");
-    if (s.calls >= 40)
+    if (s.calls >= MAX_SESSION_CALLS)
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 40-call session allowance is used. No more work was sent.",
+        "The 100-call session allowance is used. No more work was sent.",
       );
     const controller = new AbortController();
     s.controller = controller;
@@ -588,11 +590,11 @@ export class Engine {
       );
     if (s.seen.has(requestId))
       throw new Problem(409, "DUPLICATE", "This request was already sent.");
-    if (s.calls >= 40)
+    if (s.calls >= MAX_SESSION_CALLS)
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 40-call session allowance is used. No more work was sent.",
+        "The 100-call session allowance is used. No more work was sent.",
       );
     s.seen.add(requestId);
     if (s.seen.size > 100) s.seen.delete(s.seen.values().next().value!);
@@ -624,7 +626,7 @@ export class Engine {
         },
         isCurrent: current,
         chargeTurn: () => {
-          if (!current() || !s.key || s.calls >= 40) return false;
+          if (!current() || !s.key || s.calls >= MAX_SESSION_CALLS) return false;
           s.calls++;
           s.lastSeen = this.now();
           s.key.idleUntil = Math.min(this.now() + HOUR / 4, s.key.absoluteUntil);
@@ -758,11 +760,11 @@ export class Engine {
         "KEY_REQUIRED",
         "Connect your provider key and select an available model.",
       );
-    if (s.calls >= 40 && input.mode === "live")
+    if (s.calls >= MAX_SESSION_CALLS && input.mode === "live")
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 40-call local session allowance is used. No further model work will be dispatched.",
+        "The 100-call local session allowance is used. No further model work will be dispatched.",
       );
     const epoch = s.epoch;
     const controller = new AbortController();

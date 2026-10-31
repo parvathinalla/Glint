@@ -12,27 +12,12 @@
 .companion-home {
   max-width: 1000px;
   margin: 16px auto 40px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 20px;
-  align-items: start;
 }
 .companion-stage {
   text-align: center;
   padding: 0 0 16px;
 }
-.hero-avatar {
-  width: 104px;
-  height: 112px;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  grid-row: 1 / span 2;
-}
-.hero-avatar .spark {
-  width: 96px;
-  height: 108px;
-}
+
 .companion-stage > p {
   margin: 12px auto 0;
   color: #52634f;
@@ -55,6 +40,34 @@
   font-style: italic;
   opacity: 0.75;
   margin-top: 4px;
+}
+.companion-stage > .companion-ml-note {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+.companion-stage > .companion-speaker-note {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 4px;
+}
+.companion-stage > .companion-voice-note {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.voice-lock-row {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-top: 6px;
+}
+.voice-lock-row p {
+  margin: 0;
+}
+.voice-lock-row .text-button {
+  font-size: 13px;
+  padding: 0 4px;
 }
 .companion-controls .recording {
   background: #953f36;
@@ -246,15 +259,6 @@
 @media (max-width: 600px) {
   .companion-home {
     margin-top: 0;
-    gap: 4px 12px;
-  }
-  .hero-avatar {
-    width: 64px;
-    height: 72px;
-  }
-  .hero-avatar .spark {
-    width: 58px;
-    height: 66px;
   }
   .companion-controls {
     gap: 8px;

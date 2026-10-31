@@ -361,7 +361,7 @@ Design assumptions, stated plainly: this phase serves one user per session on a 
 
 ## **Cost Governor control loop**
 
-Define user session cap B, rolling 60-second spend ceiling M, foreground reserve R, and per-job worst-case reservation from bounded inputs and output limits and current billing units. At admission, committed usage plus outstanding reservations plus the next job must fit both the rolling and session budget while protecting R. Include SAM minimum billable units and duplicate-object requests. Unknown usage stays reserved conservatively; reconcile on completion without double-counting retries or cancellations. Obtain current rates and minimum billable units from the provider; the prototype's 40-dispatch cutoff is replaced by this budgeted control loop.
+Define user session cap B, rolling 60-second spend ceiling M, foreground reserve R, and per-job worst-case reservation from bounded inputs and output limits and current billing units. At admission, committed usage plus outstanding reservations plus the next job must fit both the rolling and session budget while protecting R. Include SAM minimum billable units and duplicate-object requests. Unknown usage stays reserved conservatively; reconcile on completion without double-counting retries or cancellations. Obtain current rates and minimum billable units from the provider; the prototype's 100-dispatch cutoff is replaced by this budgeted control loop.
 
 | Pressure | State / action |
 | :---- | :---- |

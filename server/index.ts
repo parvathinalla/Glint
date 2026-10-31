@@ -11,6 +11,7 @@ import {
 import { Engine } from "./engine.ts";
 import { Store } from "./store.ts";
 import { MetaProvider } from "./provider.ts";
+import { getServerVoice } from "./tts-kokoro.ts";
 
 const production = process.argv.includes("--production");
 const port = Number(process.env.PORT ?? 3100);
@@ -100,6 +101,11 @@ server.listen(port, "127.0.0.1", () =>
     `Glint local preview: ${origin} (local session auth; public deployment gated)`,
   ),
 );
+// Warm the neural voice beside startup so the first spoken reply skips the
+// model load; failures stay cached and voiceless, never fatal.
+void getServerVoice().then((voice) => {
+  if (voice) console.info(`Glint voice ready: ${voice.name}`);
+});
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
     clearInterval(cleanup);
