@@ -41,7 +41,7 @@ import {
 import { isEchoTranscript } from "./echo.ts";
 import { Spark } from "./Art.tsx";
 import { loadAppearance, applyAppearance, type Appearance } from "./appearance.ts";
-import { trackingIntent, identifyTrackingObject } from "../shared/tracking-intent.ts";
+import { trackingIntent, clarifyTrackingObject, cancelsTracking } from "../shared/tracking-intent.ts";
 import { VoiceDiagnostics, type VoiceDiagnostic } from "../shared/voice-diagnostics.ts";
 import {
   loadSubtitlesEnabled,
@@ -266,7 +266,11 @@ export function CompanionHome({
     setEnded(false);
     if (voiceInput) recordVoice("turn-accepted", { reason: "lock-off" });
     if (lock.current) {
-      if (visualJob.current || voiceInput) await interrupt(false);
+      if (visualJob.current || voiceInput) {
+        const pendingPause = interrupt(false), expectedGeneration = generation.current;
+        await pendingPause;
+        if (expectedGeneration !== generation.current) return;
+      }
       else {
         return;
       }
@@ -328,7 +332,7 @@ export function CompanionHome({
               frames: await encodeCameraFrames(camera.recent()),
               capturedAt: frame.at,
             };
-          })()
+          })().catch(() => null)
         : null;
       if (voiceInput?.audio) {
         const encoded = (await asDataUrl(voiceInput.audio)).split(",")[1];
@@ -377,8 +381,14 @@ export function CompanionHome({
         }
       }
       const intent = !instructionsUrl ? trackingIntent(text) : null;
+      if (!instructionsUrl && trackingPromptRef.current.requested && cancelsTracking(text)) {
+        setQuestion(""); setTrackingRequested(false); setTrackConcept(""); setTrackProblem("");
+        stopSpeech();
+        setMessages(items => [...items, {who:"you",text}, {who:"glint",text:"Movement check canceled. What would you like to do next?"}].slice(-20) as Message[]);
+        return;
+      }
       const clarifying = trackingPromptRef.current.requested && !trackingPromptRef.current.concept
-        ? identifyTrackingObject(text) : null;
+        ? clarifyTrackingObject(text) : null;
       if (intent || clarifying) {
         setQuestion("");
         const concept = intent?.concept ?? clarifying ?? "";
@@ -575,7 +585,7 @@ export function CompanionHome({
         );
       }
     } finally {
-      if (voiceInput && activeVoice.current) {
+      if (voiceInput && token === generation.current && activeVoice.current) {
         logTiming(activeVoice.current);
         activeVoice.current = null;
       }
@@ -753,6 +763,10 @@ export function CompanionHome({
   );
   const cancelWork = useCallback((softSpeech = false) => {
     setTracking(null);
+    if (!softSpeech && activeVoice.current) {
+      logTiming(activeVoice.current);
+      activeVoice.current = null;
+    }
     // A soft barge during the post-text audio drain must not abort the
     // stream: echo and dropped bursts resume it, and only a genuine new
     // turn (see send()) supersedes the drain.

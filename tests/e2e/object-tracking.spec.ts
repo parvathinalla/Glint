@@ -31,3 +31,25 @@ test("unknown objects are clarified and Not now does not record",async({page})=>
   await page.getByRole("button",{name:"Not now"}).click();
   expect(calls).toBe(0);
 });
+test("port questions use normal answers and negative clarifications cancel tracking",async({page})=>{
+  await page.routeWebSocket("**/events",()=>{});
+  await page.route("**/api/session",async route=>{const view=await(await route.fetch()).json();view.key={connected:true,models:["muse-spark-test"]};await route.fulfill({json:view});});
+  let answers=0,trackingCalls=0;
+  await page.route("**/api/track",route=>{trackingCalls++;return route.fulfill({status:500});});
+  await page.route("**/api/agent/stream",route=>{
+    answers++;return route.fulfill({json:{message:"Show me the USB port labels.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}});
+  });
+  await page.goto("/");await typeMessage(page,"Which side is the USB port?");
+  await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await expect(page.getByText("Show me the USB port labels.",{exact:true})).toBeVisible();
+  expect(answers).toBe(1);
+  await expect(page.getByRole("region",{name:"Movement check"})).toHaveCount(0);
+  await typeMessage(page,"Which direction did it move?");
+  await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await expect(page.getByText(/Which object should I check/)).toBeVisible();
+  await typeMessage(page,"don't track the mouse");
+  await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await expect(page.getByText(/Movement check canceled/)).toBeVisible();
+  await expect(page.getByRole("region",{name:"Movement check"})).toHaveCount(0);
+  expect(trackingCalls).toBe(0);expect(answers).toBe(1);
+});

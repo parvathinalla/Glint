@@ -1,6 +1,44 @@
 import { test, expect, type Page } from "./fixture";
 test.use({ reducedMotion: "reduce" });
 
+test("ending a session cannot dispatch a voice turn waiting for pause",async({page,context})=>{
+  await context.grantPermissions(["microphone"]);
+  await syntheticMicrophone(page);
+  await page.addInitScript(()=>{
+    localStorage.setItem("glint-streaming-voice","0");
+    localStorage.setItem("glint-ml-vad","0");
+    localStorage.setItem("glint-neural-voice","0");
+  });
+  let session:Record<string,unknown>,answerCalls=0,voiceCalls=0,phaseStarted=false;
+  let releasePhase!:()=>void,releaseAnswer!:()=>void;
+  const phaseGate=new Promise<void>(resolve=>{releasePhase=resolve;});
+  const answerGate=new Promise<void>(resolve=>{releaseAnswer=resolve;});
+  await page.routeWebSocket("**/events",()=>{});
+  await page.route("**/api/session",async route=>{session=await(await route.fetch()).json();session.key={connected:true,models:["muse-spark-test"]};await route.fulfill({json:session});});
+  await page.route("**/api/agent/stream",async route=>{
+    answerCalls++;await answerGate;
+    await route.fulfill({json:{message:"Old response.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}}).catch(()=>{});
+  });
+  await page.route("**/api/voice",route=>{voiceCalls++;return route.fulfill({json:{transcript:"New question.",epoch:route.request().postDataJSON().epoch}});});
+  await page.route("**/api/phase",async route=>{phaseStarted=true;await phaseGate;await route.fulfill({json:session});});
+  await page.route("**/api/vision/stop",route=>route.fulfill({json:session}));
+  await startVoice(page);
+  await page.getByRole("button",{name:"Open conversation"}).click();
+  await page.getByRole("textbox",{name:"Message Glint"}).fill("Please help me get started.");
+  await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await expect.poll(()=>answerCalls).toBe(1);
+  await page.waitForTimeout(600);await say(page);
+  await expect.poll(()=>phaseStarted).toBe(true);
+  await page.getByRole("button",{name:"Close conversation"}).click();
+  await page.getByRole("button",{name:"End session",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();
+  const phaseResponse=page.waitForResponse("**/api/phase");
+  releasePhase();releaseAnswer();await phaseResponse;
+  await page.waitForTimeout(400);
+  expect(voiceCalls).toBe(0);expect(answerCalls).toBe(1);
+  await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();
+});
+
 test("voice diagnostics require opt-in and share no transcript content", async ({ page, context }) => {
   await context.grantPermissions(["microphone"]);
   await syntheticMicrophone(page);

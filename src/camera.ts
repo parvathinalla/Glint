@@ -149,7 +149,7 @@ export function useCamera(onProblem: (s: string) => void) {
     } catch {
       stop();
       onProblem(
-        "Camera unavailable. Allow camera access in your browser, or use the labeled replay.",
+        "Camera unavailable. Allow camera access in your browser, or continue in Conversation.",
       );
       return false;
     }

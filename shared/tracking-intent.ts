@@ -9,12 +9,22 @@ const objects: [RegExp, string][] = [
   [/\bhand\b|చేయి/iu, "hand"],
 ];
 export function identifyTrackingObject(text: string): string | null {
-  return objects.find(([pattern]) => pattern.test(text))?.[1] ?? null;
+  const matches = objects.filter(([pattern]) => pattern.test(text));
+  return matches.length === 1 ? matches[0][1] : null;
+}
+export function cancelsTracking(text: string): boolean {
+  return /\b(don['’]?t|do not|stop|cancel|never mind|nevermind|not now|vaddu|cheyaku|cheyyaku|aapu)\b|వద్దు|ఆపు/iu.test(text);
+}
+export function clarifyTrackingObject(text: string): string | null {
+  if (cancelsTracking(text) || text.length > 60 || /\b(what|which|why|how|where)\b/iu.test(text)) return null;
+  return identifyTrackingObject(text);
 }
 /** A narrow local route for supported movement requests, not a general tool agent. */
 export function trackingIntent(text: string): { concept: string | null } | null {
   if (/\b(order|package|shipment|expenses|fitness|flight|stock|song|music|time)\b/iu.test(text)) return null;
-  if (/\b(don['’]?t|do not|stop|cancel|explain|what is|how (does|do|are))\b/iu.test(text)) return null;
-  const request = /\b(track|tracking|movement)\b|which (way|side|direction)|\b(move|moved|moving)\b.*\?|\b(ye|ee|e|which) side\b|ఏ.*వైపు|కదిల/iu.test(text);
+  if (cancelsTracking(text) || /\b(explain|what is|how (does|do|are))\b/iu.test(text)) return null;
+  const movement = /\b(move|moved|moving|went)\b|కదిల/iu.test(text);
+  const direction = /which (way|side|direction)|\b(ye|ee|e) side\b|ఏ.*వైపు/iu.test(text);
+  const request = /\btrack\b|\b(check|show|analyze)\b.*\bmovement\b/iu.test(text) || (movement && (direction || text.includes("?")));
   return request ? { concept: identifyTrackingObject(text) } : null;
 }
