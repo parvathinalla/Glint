@@ -10,10 +10,13 @@ ideas" sends a normal text-only request. Spark also receives current look contex
 and is told that Glint supports image previews, without receiving photo bytes. During
 camera/voice use, a main-screen link opens the card without reopening chat by itself.
 
-The user chooses or takes a JPEG, PNG or WebP photo (up to 10 MB), describes the
-look, then explicitly presses Generate preview. Browser processing reduces it
+The primary input is a still captured from Glint's existing live camera stream.
+The preview shows that same stream, and Capture camera view freezes a frame for
+review. Retake replaces it; neither action dispatches Muse Image. The native
+phone-camera file picker is not used. File upload (JPEG, PNG, WebP up to 10 MB)
+remains an optional fallback. After review, the user presses Generate preview. Browser processing reduces it
 to a JPEG no larger than 1024 px on its longest side and under 600 KB. It removes
-metadata; it does not automatically take a camera frame. HEIC is not supported.
+metadata; camera capture is explicit. HEIC is not supported.
 
 `POST /api/look-preview` requires the existing session cookie, matching origin,
 CSRF token, explicit consent, current epoch, unique request ID and connected key.

@@ -16,21 +16,37 @@ async function jpegPhoto(blob: Blob): Promise<string> {
   } finally {image.close();}
 }
 
-export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromptChange,generate,cancel}: {
+export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromptChange,generate,cancel,cameraStream,openCamera,captureCamera,flipCamera}: {
   request:string;accepted:boolean;onAccept:()=>void;onDismiss:()=>void;onIdeas:()=>void;
   onPromptChange:(prompt:string)=>void;
+  cameraStream:MediaStream|null;openCamera:()=>Promise<void>;captureCamera:()=>Promise<Blob>;flipCamera:()=>void;
   generate:(photo:string,prompt:string)=>Promise<LookPreviewResult>;cancel:()=>void;
 }) {
   const [photo,setPhoto]=useState(""),[result,setResult]=useState("");
   const prompt=request;
   const [busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false),[error,setError]=useState("");
   const alive=useRef(true),selection=useRef(0),job=useRef(0),working=useRef(false);
+  const liveVideo=useRef<HTMLVideoElement>(null);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;selection.current++;job.current++;};},[]);
-  async function select(file?:File){
+  useEffect(()=>{
+    const video=liveVideo.current;if(!video)return;
+    video.srcObject=cameraStream;
+    if(cameraStream)void video.play().catch(()=>{});
+    return()=>{video.srcObject=null;};
+  },[cameraStream,accepted]);
+  async function select(file?:Blob){
     if(!file)return;const token=++selection.current;setPreparing(true);setError("");
     try{const next=await jpegPhoto(file);if(alive.current&&token===selection.current){setPhoto(next);setResult("");}}
     catch(error){if(alive.current&&token===selection.current)setError(error instanceof Error?error.message:"This photo could not be opened.");}
     finally{if(alive.current&&token===selection.current)setPreparing(false);}
+  }
+  async function capture(){
+    if(preparing||working.current)return;
+    setPreparing(true);setError("");const token=++selection.current;
+    try{const blob=await captureCamera();const next=await jpegPhoto(blob);
+      if(alive.current&&selection.current===token){setPhoto(next);setResult("");}}
+    catch(error){if(alive.current&&selection.current===token)setError(error instanceof Error?error.message:"The camera frame could not be captured.");}
+    finally{if(alive.current&&selection.current===token)setPreparing(false);}
   }
   async function create(){
     if(working.current||preparing||!photo||prompt.trim().length<3)return;
@@ -49,8 +65,8 @@ export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromp
     <p className="glint-eyebrow">MUSE IMAGE · PHOTO PREVIEW</p>
     {!accepted?<>
       <h3>Want to see the look on your photo?</h3>
-      <p>Choose a look and a photo. Nothing is captured or sent until you press Generate preview.</p>
-      <div className="glint-card-actions"><button className="glint-primary" onClick={onAccept}>Yes, choose a photo</button><button className="glint-text" onClick={onIdeas}>No, just ideas</button><button className="glint-text" onClick={onDismiss}>Not now</button></div>
+      <p>Use the image in Glint’s camera view. You can review the captured frame before sending it to Muse Image.</p>
+      <div className="glint-card-actions"><button className="glint-primary" onClick={onAccept}>Yes, preview the look</button><button className="glint-text" onClick={onIdeas}>No, just ideas</button><button className="glint-text" onClick={onDismiss}>Not now</button></div>
     </>:<>
       <h3>{busy?"Creating your preview…":"Create your look"}</h3>
       <div className="glint-look-photos">
@@ -59,8 +75,11 @@ export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromp
       </div>
       <fieldset disabled={busy||preparing}>
         <legend>Photo and look</legend>
+        {cameraStream&&<video className="glint-look-live" ref={liveVideo} autoPlay muted playsInline aria-label="Live camera for look preview"/>}
+        <p>{cameraStream?"Frame the image you want to edit, then capture this camera view.":"Open Glint’s camera to capture the view on your screen."}</p>
+        <button className="glint-primary" onClick={()=>{if(cameraStream)void capture();else void openCamera();}}>{cameraStream?photo?"Retake camera view":"Capture camera view":"Open Glint camera"}</button>
+        {cameraStream&&<button className="glint-text" onClick={flipCamera}>Switch preview camera</button>}
         <label className="glint-text">{photo?"Replace photo":"Choose a photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>{void select(event.target.files?.[0]);event.target.value="";}}/></label>
-        <label className="glint-text">Take a photo<input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={event=>{void select(event.target.files?.[0]);event.target.value="";}}/></label>
         <label className="glint-look-prompt">{result?"What would you like to change?":"Describe the look"}<textarea value={prompt} maxLength={1500} onChange={event=>onPromptChange(event.target.value)} placeholder="For example: a celestial witch costume with soft silver makeup"/></label>
       </fieldset>
       <small>Your photo is sent to Meta only when you generate. Glint keeps photos and previews in this page’s memory; it does not save them to its database. Each generation uses your connected key and one session call.</small>

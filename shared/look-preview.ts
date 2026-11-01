@@ -20,6 +20,7 @@ export function lookFollowup(text: string, request: string): {kind:"photo"|"styl
     return {kind:"dismiss",request};
   if(/^no[.! ]*$/i.test(value))return {kind:"clarify",request};
   if(/^(yes|yeah|yes please|show me|okay|ok|go ahead)[.! ]*$/i.test(value) ||
+    /\b(?:capture|use|take)\b.{0,50}\b(?:camera|screen|frame|view)\b/i.test(value) ||
     /\b(?:create|generate|make|show|see|want|give|render|draw|edit)\b.{0,90}\b(?:image|picture|photo|preview)\b/i.test(value) ||
     /\b(?:choose|select|upload|take|pick)\b.{0,35}\b(?:photo|picture|image)\b/i.test(value))
     return {kind:"photo",request:updated};

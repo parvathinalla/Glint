@@ -6,6 +6,7 @@ async function setup(page:Page){
   await page.routeWebSocket("**/events",()=>{});
   await page.route("**/api/session",async route=>{session=await(await route.fetch()).json();session.key={connected:true,models:["muse-spark-test"]};await route.fulfill({json:session});});
   await page.route("**/api/phase",async route=>{session.epoch=Number(session.epoch)+1;await route.fulfill({json:session});});
+  await page.route("**/api/observe",route=>route.fulfill({status:409,json:{message:"Observation paused in fixture"}}));
   await page.goto("/");
 }
 async function photo(page:Page,color:string){
@@ -21,7 +22,7 @@ test("photo previews require an offer, selection and explicit generation; refine
   });
   await typeMessage(page,"Which Halloween look suits me?");await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.getByRole("region",{name:"Look preview"})).toBeVisible();expect(calls).toBe(0);
-  await page.getByRole("button",{name:"Yes, choose a photo"}).click();expect(calls).toBe(0);
+  await page.getByRole("button",{name:"Yes, preview the look"}).click();expect(calls).toBe(0);
   await expect(page.getByRole("button",{name:"Generate preview",exact:true})).toBeDisabled();
   await page.getByLabel("Choose a photo",{exact:true}).setInputFiles({name:"portrait.png",mimeType:"image/png",buffer:Buffer.from(original.split(",")[1],"base64")});
   await expect(page.getByAltText("Selected reference photo")).toBeVisible();expect(calls).toBe(0);
@@ -50,7 +51,7 @@ test("generation can be canceled without displaying its late result",async({page
   const gate=new Promise<void>(resolve=>{release=resolve;});
   await page.route("**/api/look-preview",async route=>{calls++;const body=route.request().postDataJSON();await gate;await route.fulfill({json:{image:original,epoch:body.epoch}}).catch(()=>{});});
   await typeMessage(page,"Show a Halloween costume on me");await page.getByRole("button",{name:"Send message",exact:true}).click();
-  await page.getByRole("button",{name:"Yes, choose a photo"}).click();
+  await page.getByRole("button",{name:"Yes, preview the look"}).click();
   await page.getByLabel("Choose a photo",{exact:true}).setInputFiles({name:"portrait.png",mimeType:"image/png",buffer:Buffer.from(original.split(",")[1],"base64")});
   await page.getByRole("button",{name:"Generate preview",exact:true}).click();await expect.poll(()=>calls).toBe(1);
   await page.getByRole("button",{name:"Cancel generation"}).click();release();
@@ -83,4 +84,27 @@ test("fairy conversation remembers style and opens photo controls when asked for
   await page.getByLabel("Describe the look").fill("Fairy makeup with a purple cape");
   await expect(page.getByRole("button",{name:"Generate preview",exact:true})).toBeEnabled();
   expect(textCalls).toBe(0);expect(imageCalls).toBe(0);
+});
+test("captures the existing Glint camera view and sends only the reviewed frame",async({page,context})=>{
+  await context.grantPermissions(["camera"]);await setup(page);
+  let calls=0,reference="";const edited=await photo(page,"blue");
+  await page.route("**/api/look-preview",async route=>{calls++;const body=route.request().postDataJSON();reference=body.photo;await route.fulfill({json:{image:edited,epoch:body.epoch}});});
+  await typeMessage(page,"Which Halloween look suits me?");await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await page.getByRole("button",{name:"Yes, preview the look"}).click();
+  await page.getByRole("button",{name:"Open Glint camera"}).click();
+  const live=page.getByLabel("Live camera for look preview",{exact:true});
+  await expect(live).toBeVisible();await expect.poll(()=>live.evaluate(node=>(node as HTMLVideoElement).readyState)).toBeGreaterThanOrEqual(2);
+  expect(await page.evaluate(()=>{
+    const main=document.querySelector("video[aria-label='Your live camera preview']") as HTMLVideoElement;
+    const preview=document.querySelector("video[aria-label='Live camera for look preview']") as HTMLVideoElement;
+    return !!main.srcObject && main.srcObject===preview.srcObject;
+  })).toBe(true);
+  await expect(page.locator("input[capture]")).toHaveCount(0);
+  await page.getByRole("button",{name:"Capture camera view",exact:true}).click();
+  const selected=page.getByAltText("Selected reference photo");await expect(selected).toBeVisible();
+  const reviewed=await selected.getAttribute("src");expect(reviewed).toMatch(/^data:image\/jpeg;base64,/);expect(calls).toBe(0);
+  await page.getByRole("button",{name:"Generate preview",exact:true}).click();
+  await expect(page.getByAltText("Generated look preview")).toBeVisible();expect(calls).toBe(1);expect(reference).toBe(reviewed);
+  await page.getByRole("button",{name:"Retake camera view"}).click();
+  await expect(page.getByAltText("Generated look preview")).toHaveCount(0);expect(calls).toBe(1);
 });

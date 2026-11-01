@@ -401,10 +401,10 @@ export function CompanionHome({
           reply="Do you mean no photo preview, or do you want me to create the look? Your chosen look is still here.";
         }else if(followup.kind==="photo"){
           setLookAccepted(true);setLookPrompt(followup.request);
-          reply="Yes, I can create that look. Choose or take a photo of yourself in the look preview, then press Generate preview. You don't need a photo of the fairy look or any makeup supplies.";
+          reply="Yes, I can create that look. Capture your current Glint camera view in the look preview, review the frame, then press Generate preview. You do not need makeup supplies or a photo of the finished look.";
         }else{
           setLookPrompt(followup.request);
-          reply=lookAccepted?"I've updated your chosen look. Choose a photo if needed, then press Generate preview when you're ready.":"Got it, I've saved that look preference. I can show it on a photo of you. Say create the image, or choose Yes, choose a photo in the preview.";
+          reply=lookAccepted?"I've updated your chosen look. Choose a photo if needed, then press Generate preview when you're ready.":"Got it, I've saved that look preference. I can show it on a photo of you. Say create the image, or choose Yes, preview the look in the preview.";
         }
         setMessages(items=>[...items,{who:"you",text},{who:"glint",text:reply}].slice(-20) as Message[]);
         stopSpeech();if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
@@ -413,7 +413,7 @@ export function CompanionHome({
       if(!instructionsUrl && !skipLookRouting && wantsLookPreview(text)){
         const direct=lookFollowup(text,text)?.kind==="photo";
         setLookRequest(text.slice(0,1500));setLookPrompt(text.slice(0,1500));setLookAccepted(direct);setLookVersion(version=>version+1);setQuestion("");
-        const offer=direct?"Choose or take a photo of yourself in the look preview, describe the look, then press Generate preview.":"I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
+        const offer=direct?"Capture the current Glint camera view in the look preview, describe the look, then press Generate preview.":"I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
         setMessages(items=>[...items,{who:"you",text},{who:"glint",text:offer}].slice(-20) as Message[]);
         stopSpeech();if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
         return;
@@ -638,6 +638,20 @@ export function CompanionHome({
   }
   const sendRef = useRef(send);
   sendRef.current = send;
+  async function captureLook():Promise<Blob>{
+    const video=camera.video.current,token=generation.current;
+    if(!cameraActive.current||!video?.srcObject||video.readyState<2||!video.videoWidth)
+      throw Error("The camera is not ready. Open Glint camera and wait for the live view.");
+    const source=video.srcObject;
+    const scale=Math.min(1,1024/Math.max(video.videoWidth,video.videoHeight));
+    const canvas=document.createElement("canvas");canvas.width=Math.round(video.videoWidth*scale);canvas.height=Math.round(video.videoHeight*scale);
+    const context=canvas.getContext("2d");if(!context)throw Error("Camera capture is unavailable.");
+    context.drawImage(video,0,0,canvas.width,canvas.height);
+    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,"image/jpeg",.8));
+    if(!blob||!cameraActive.current||video.srcObject!==source||token!==generation.current)
+      throw Error("The camera changed. Capture the view again.");
+    return blob;
+  }
   async function generateLook(photo:string,prompt:string):Promise<LookPreviewResult>{
     if(!current.current.key.connected){connect();throw Error("Connect your model key before generating a preview.");}
     const pending=interrupt(false),expected=generation.current;
@@ -1262,7 +1276,7 @@ export function CompanionHome({
               <button className="glint-text" onClick={() => { setTrackingRequested(false); setTrackProblem(""); }}>Not now</button>
             </div>}
           </div>}
-          {lookRequest&&!ended&&<LookPreview key={lookVersion} request={lookPrompt} accepted={lookAccepted} onPromptChange={setLookPrompt} onAccept={()=>setLookAccepted(true)} onDismiss={()=>{setLookRequest("");setLookAccepted(false);}} onIdeas={()=>{const question=lookPrompt||lookRequest;setLookRequest("");setLookAccepted(false);void send("Give me text-only ideas; do not generate images. "+question,undefined,false,undefined,true);}} generate={generateLook} cancel={()=>void interrupt(false)}/>}
+          {lookRequest&&!ended&&<LookPreview key={lookVersion} request={lookPrompt} accepted={lookAccepted} onPromptChange={setLookPrompt} onAccept={()=>setLookAccepted(true)} onDismiss={()=>{setLookRequest("");setLookAccepted(false);}} onIdeas={()=>{const question=lookPrompt||lookRequest;setLookRequest("");setLookAccepted(false);void send("Give me text-only ideas; do not generate images. "+question,undefined,false,undefined,true);}} cameraStream={camera.active?camera.video.current?.srcObject as MediaStream|null:null} openCamera={openCamera} captureCamera={captureLook} flipCamera={()=>{void interrupt(false,true).then(()=>camera.flip());}} generate={generateLook} cancel={()=>void interrupt(false)}/>}
           {busy && <p className="glint-wait"><LoaderCircle className="spin" size={17}/>{researching ? "Reading your instructions…" : "Thinking…"}</p>}
         </div>
         {problem && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}</div>}

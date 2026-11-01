@@ -14,7 +14,7 @@ it("carries look choices into explicit image followups and keeps ambiguous no fr
   const fantasy=lookFollowup("fantasy makeup",start)!;
   const fairy=lookFollowup("I want fairy.",fantasy.request)!;
   expect(fairy.kind).toBe("style");expect(fairy.request).toContain("fairy");
-  for(const text of ["I don't have anything right now, just you create a image I will see if that looks good I will go and buy the stuff","can I choose a photo?","I want an image","yes"]){
+  for(const text of ["I don't have anything right now, just you create a image I will see if that looks good I will go and buy the stuff","can I choose a photo?","I want an image","Use the current camera view","yes"]){
     const result=lookFollowup(text,fairy.request)!;expect(result.kind).toBe("photo");expect(result.request).toContain("fairy");
   }
   expect(lookFollowup("No.",fairy.request)?.kind).toBe("clarify");
