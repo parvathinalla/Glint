@@ -1,20 +1,25 @@
 import { useId } from "react";
+import { SilverStar } from "./SilverStar";
 export function Spark({state="ready",small=false}:{state?:string;small?:boolean}) {
+  if(small) return <SparkVector state={state} small/>;
+  return <SilverStar state={state}><SparkVector state={state}/></SilverStar>;
+}
+function SparkVector({state="ready",small=false}:{state?:string;small?:boolean}) {
   const id="spark-"+useId().replace(/[^a-zA-Z0-9_-]/g,"");
   const shape="M80 15C88 15 94 38 103 46C113 55 143 58 146 69C150 81 129 91 121 102C114 111 119 137 108 142C97 148 87 132 79 132C70 132 56 148 46 141C36 134 42 114 34 103C26 92 7 83 12 71C17 59 43 57 53 47C64 36 70 15 80 15Z";
   return <svg className={`spark ${small?"spark-small":""} spark-${state}`} viewBox="0 0 160 180" role="img" aria-label={`Glint AI companion, ${state}`}>
     <defs>
       <radialGradient id={id+"-base"} cx="35%" cy="23%" r="82%">
-        <stop stopColor="#a8bce9"/><stop offset=".27" stopColor="#6384cc"/><stop offset=".58" stopColor="#365cac"/><stop offset=".83" stopColor="#284583"/><stop offset="1" stopColor="#172c58"/>
+        <stop stopColor="#dceaf0"/><stop offset=".27" stopColor="#b3cbd7"/><stop offset=".58" stopColor="#829eaf"/><stop offset=".83" stopColor="#57788e"/><stop offset="1" stopColor="#314e65"/>
       </radialGradient>
       <radialGradient id={id+"-belly"} cx="68%" cy="67%" r="64%">
-        <stop stopColor="#162b56" stopOpacity=".72"/><stop offset=".56" stopColor="#32528f" stopOpacity=".25"/><stop offset="1" stopColor="#9aadd5" stopOpacity="0"/>
+        <stop stopColor="#2b4558" stopOpacity=".72"/><stop offset=".56" stopColor="#66879e" stopOpacity=".25"/><stop offset="1" stopColor="#b4d9e9" stopOpacity="0"/>
       </radialGradient>
       <radialGradient id={id+"-shine"} cx="30%" cy="20%" r="65%">
         <stop stopColor="#f2f5ff" stopOpacity=".8"/><stop offset=".24" stopColor="#c2d0ee" stopOpacity=".3"/><stop offset=".72" stopColor="#a8bce1" stopOpacity="0"/>
       </radialGradient>
       <linearGradient id={id+"-shoe"} x1="0" y1="0" x2=".7" y2="1">
-        <stop stopColor="#5b79b4"/><stop offset=".36" stopColor="#344d7a"/><stop offset=".7" stopColor="#1b2b48"/><stop offset="1" stopColor="#101a2e"/>
+        <stop stopColor="#9cb9cb"/><stop offset=".36" stopColor="#638296"/><stop offset=".7" stopColor="#344c60"/><stop offset="1" stopColor="#203446"/>
       </linearGradient>
       <filter id={id+"-round"} x="-25%" y="-25%" width="150%" height="160%" colorInterpolationFilters="sRGB">
         <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="bump"/>

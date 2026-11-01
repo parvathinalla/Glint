@@ -94,3 +94,13 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
   .glint-sheet { width:100%; max-width:100%; max-height:94svh; margin:auto 0 0; border-radius:25px 25px 0 0; }.glint-conversation[open] { height:85svh; }.glint-sheet-header { padding:20px; }.glint-sheet .glint-messages { padding:18px; }.glint-sheet .message-composer { padding:12px 16px max(12px,env(safe-area-inset-bottom)); }.glint-settings { max-height:90svh; }.glint-settings-body { padding:20px; }
 }
 @media (prefers-reduced-motion:reduce) { .glint-star-scene>.spark { animation:none; } }
+
+/* Silver-blue companion inspired by the floating reference, with a vector fallback. */
+.silver-star { display:inline-block; position:relative; isolation:isolate; }
+.silver-star-canvas, .silver-star-fallback { position:absolute; inset:0; width:100%; height:100%; }
+.silver-star-canvas { opacity:0; pointer-events:none; }
+.silver-star-fallback>.spark { width:100%; height:100%; margin:0; }
+.silver-star-ready>.silver-star-canvas { opacity:1; }
+.silver-star-ready>.silver-star-fallback { visibility:hidden; }
+.glint-star-scene>.silver-star { animation:none; filter:none; }
+.glint-star-orbit, .glint-star-scene>.glint-sparkle { display:none; }

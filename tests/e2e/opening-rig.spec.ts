@@ -24,3 +24,20 @@ for(const theme of ["Light","Dark"] as const) {
     await page.screenshot({path:"test-results/mascot-"+theme.toLowerCase()+".png"});
   });
 }
+test("silver companion stays still for reduced motion and falls back on GPU loss",async({page})=>{
+  await page.goto("/");
+  const hero=page.locator(".glint-star-scene>.silver-star");
+  await expect(hero).toBeVisible();
+  const available=await hero.locator("canvas").evaluate(node=>!!(node as HTMLCanvasElement).getContext("webgl"));
+  if(available){
+    await expect(hero).toHaveClass(/silver-star-ready/);
+    const first=await hero.screenshot();
+    await page.waitForTimeout(250);
+    expect(await hero.screenshot()).toEqual(first);
+    await hero.locator("canvas").evaluate(node=>{
+      (node as HTMLCanvasElement).getContext("webgl")?.getExtension("WEBGL_lose_context")?.loseContext();
+    });
+    await expect(hero).not.toHaveClass(/silver-star-ready/);
+  }
+  await expect(hero.locator(".silver-star-fallback>svg")).toBeVisible();
+});
