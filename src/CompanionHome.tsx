@@ -1,3 +1,4 @@
+import {clientDiagnostics,traceClient} from "./diagnostics";
 import {
   useCallback,
   useEffect,
@@ -5,6 +6,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { CameraTaskRunner, type CameraTaskEvent, type TaskDependencies } from "./camera-task-runner";
+import { CameraTaskPanel } from "./CameraTaskPanel";
+import { conditionResult, isTaskStatusQuestion, isTaskCancelRequest, actionMessage } from "../shared/camera-tools";
+import { imageDataBlob, jpegPhoto } from "./LookPreview";
 import { LookPreview } from "./LookPreview";
 import { wantsLookPreview, lookFollowup, type LookPreviewResult } from "../shared/look-preview";
 import {
@@ -130,6 +135,19 @@ export function CompanionHome({
   const [trackingAllowed, setTrackingAllowed] = useState(true);
   const [lastTrackingClip, setLastTrackingClip] = useState<string | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
+  const [toolsEnabled] = useState(()=>{try{return localStorage.getItem("glint-camera-tools")!=="0";}catch{return true;}});
+  const [cameraTask,setCameraTask]=useState<CameraTaskEvent|null>(null);
+  const taskRunner=useRef<CameraTaskRunner|null>(null);
+  const taskDeps=useRef<TaskDependencies|null>(null);
+  const lastTaskSummary=useRef("");
+  const taskQuestion=useRef("");
+  const taskCameraVersion=useRef(0),taskCameraOpening=useRef(false);
+  const taskState=useRef<CameraTaskEvent|null>(null);
+  const imageFollowups=useRef<Array<{text:string;audio?:Blob;withImage:boolean;epoch:number;version:number;echo:boolean}>>([]);
+  const followupWorking=useRef(false),followupController=useRef<AbortController|null>(null);
+  const queuedTaskVoice=useRef<{audio?:Blob;asrFinalMs?:number;note?:string;text:string;withImage:boolean}|null>(null);
+  const [backgroundChecks,setBackgroundChecks]=useState(false);
+  const backgroundCalls=useRef(0);
   const [lookRequest,setLookRequest]=useState("");
   const [lookPrompt,setLookPrompt]=useState("");
   const [lookAccepted,setLookAccepted]=useState(false);
@@ -167,6 +185,7 @@ export function CompanionHome({
   const [diagnosticsOn, setDiagnosticsOn] = useState(false);
   const [diagnosticEvents, setDiagnosticEvents] = useState<VoiceDiagnostic[]>([]);
   const [diagnosticUpload, setDiagnosticUpload] = useState("");
+  const [traceStatus,setTraceStatus]=useState("");
   const diagnostics = useRef(new VoiceDiagnostics());
   const diagnosticTurn = useRef(0), replyDiagnosticTurn = useRef(0);
   const diagnosticEnds = useRef(new Map<number, number>());
@@ -176,9 +195,30 @@ export function CompanionHome({
   const recordVoice = useCallback((stage: VoiceDiagnostic["stage"],
     details: { reason?: VoiceDiagnostic["reason"]; durationMs?: number } = {},
     turn = diagnosticTurn.current) => {
+    traceClient({stage:"voice",voiceStage:stage,turn,durationMs:details.durationMs,reason:details.reason});
     if (diagnostics.current.record({ stage, turn, ...details }))
       setDiagnosticEvents(diagnostics.current.snapshot());
   }, []);
+  useEffect(()=>{
+    const timer=setInterval(()=>{
+      const events=clientDiagnostics.takeBatch();if(!events.length)return;
+      void latestApi.current("diagnostics",{events},"POST").catch(()=>{});
+    },4000);
+    const error=()=>traceClient({stage:"ui-error",reason:"unknown"});
+    const csp=()=>traceClient({stage:"ui-error",reason:"invalid"});
+    window.addEventListener("error",error);window.addEventListener("unhandledrejection",error);document.addEventListener("securitypolicyviolation",csp);
+    return()=>{clearInterval(timer);window.removeEventListener("error",error);window.removeEventListener("unhandledrejection",error);document.removeEventListener("securitypolicyviolation",csp);};
+  },[]);
+  async function downloadTrace(){
+    setTraceStatus("");
+    try{
+      const server=await api("diagnostics",undefined,"GET");
+      const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),browser:clientDiagnostics.snapshot(),server},null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob),anchor=document.createElement("a");anchor.href=url;anchor.download="glint-diagnostic-trace.json";anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setTraceStatus("Diagnostic trace downloaded.");
+    }catch{setTraceStatus("Server trace unavailable. Downloading browser events only.");
+      const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,browser:clientDiagnostics.snapshot()},null,2)],{type:"application/json"}));const anchor=document.createElement("a");anchor.href=url;anchor.download="glint-browser-trace.json";anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+  }
   const recordPlayback = (stage: "audio-scheduled" | "device-playback-start" | "playback-blocked") => {
     const turn = replyDiagnosticTurn.current;
     const end = diagnosticEnds.current.get(turn);
@@ -209,6 +249,7 @@ export function CompanionHome({
   const voicePlayer = useRef<VoicePlayer | null>(null);
   const neuralReply = useRef(false);
   const replyDone = useRef(false);
+  const localSpeechActive=useRef(false);
   const pendingVoice = useRef<{
     capturedStartMs: number;
     asrFirstPartialMs?: number;
@@ -263,6 +304,58 @@ export function CompanionHome({
     wakeLock.current?.release().catch(() => undefined);
     wakeLock.current = null;
   }
+  function localTaskReply(text:string,reply:string){
+    stopSpeech();
+    setQuestion("");setMessages(items=>[...items,{who:"you",text},{who:"glint",text:reply}].slice(-20) as Message[]);
+    if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
+  }
+  function answerTaskControl(text:string){
+    if(isTaskCancelRequest(text)){cancelCameraTask();localTaskReply(text,"The camera task was canceled.");return true;}
+    if(isTaskStatusQuestion(text)){
+      const task=taskState.current;
+      localTaskReply(text,task?.state==="busy"?"Your image is still being created. I’m listening while it runs.":task?.state==="result"?"Your image is ready.":task?.state==="error"?"The image could not be created. You can try again.":"No image is being created right now.");return true;
+    }
+    return false;
+  }
+  async function drainImageFollowups(){
+    if(followupWorking.current)return;followupWorking.current=true;
+    try{
+      while(imageFollowups.current.length){
+        const job=imageFollowups.current.shift()!;
+        if(job.epoch!==current.current.epoch||job.version!==generation.current)continue;
+        const controller=new AbortController();followupController.current=controller;
+        try{
+          let text=job.text;
+          if(job.audio){
+            const audio=(await asDataUrl(job.audio)).split(",")[1];
+            const result=await api("voice",{audio,epoch:job.epoch,requestId:crypto.randomUUID()},"POST",controller.signal) as {transcript:string;epoch:number};
+            if(result.epoch!==current.current.epoch)continue;text=result.transcript;recordVoice("asr-final");
+          }
+          if(controller.signal.aborted||job.version!==generation.current)continue;
+          if(!text.trim()){recordVoice("turn-rejected",{reason:"empty"});speech.current?.resume();voicePlayer.current?.resume();continue;}
+          if(job.echo&&isEchoTranscript(text,messages.filter(message=>message.who==="glint").slice(-3).map(message=>message.text))){recordVoice("turn-rejected",{reason:"echo"});speech.current?.resume();voicePlayer.current?.resume();continue;}
+          if(answerTaskControl(text))continue;
+          setQuestion("");setMessages(items=>[...items,{who:"you",text}].slice(-20) as Message[]);
+          stopSpeech();setVoiceNote(taskState.current?.state==="busy"?"Answering your follow-up while the image runs.":"Answering your follow-up.");
+          let image:string|undefined,capturedAt:number|undefined;
+          if(job.withImage&&cameraActive.current){const blob=await captureLook(controller.signal);image=await asDataUrl(blob);if(image.length>800000)image=await jpegPhoto(blob);capturedAt=Date.now();}
+          const reply=await streamAgent(current.current.csrf,{question:text,image,capturedAt,epoch:current.current.epoch,model:model||current.current.key.models[0],voice:"off",requestId:crypto.randomUUID(),cameraTools:{camera:cameraActive.current,tracking:false,lastImage:taskRunner.current?.imageAvailable??false,imageInProgress:true,lastResult:lastTaskSummary.current||"Image generation is running."}},controller.signal,()=>{});
+          if(controller.signal.aborted||job.version!==generation.current||reply.epoch!==current.current.epoch)continue;
+          setMessages(items=>[...items,{who:"glint",text:reply.message}].slice(-20) as Message[]);
+          if(aloud.current){speech.current?.push(reply.message);speech.current?.finish();}
+        }catch(error){if(!controller.signal.aborted&&job.version===generation.current)setProblem(error instanceof Error?error.message:"The follow-up could not finish. Please repeat it.");}
+        finally{if(followupController.current===controller)followupController.current=null;}
+      }
+    }finally{followupWorking.current=false;setVoiceNote("");}
+  }
+  function enqueueImageFollowup(text:string,withImage:boolean,voiceInput?:{audio?:Blob}){
+    const echo=!!pendingVoice.current?.duringSpeech;pendingVoice.current=null;
+    if(text&&(!voiceInput||!echo||!isEchoTranscript(text,messages.filter(message=>message.who==="glint").slice(-3).map(message=>message.text)))&&answerTaskControl(text))return;
+    if(imageFollowups.current.length>=4){traceClient({stage:"queue",reason:"queue-full"});setVoiceNote("Four follow-ups are waiting. Please repeat this one after I answer.");return;}
+    traceClient({stage:"queue",reason:"queued",count:imageFollowups.current.length+1});
+    imageFollowups.current.push({text,audio:voiceInput?.audio,withImage,epoch:current.current.epoch,version:generation.current,echo});
+    setVoiceNote("I heard your follow-up. The image keeps running.");void drainImageFollowups();
+  }
   async function send(
     text: string,
     instructionsUrl?: string,
@@ -271,6 +364,14 @@ export function CompanionHome({
     skipLookRouting = false,
   ) {
     setEnded(false);
+    if((taskState.current?.state==="busy"&&taskState.current.kind==="generated")||followupWorking.current){enqueueImageFollowup(text,withImage,voiceInput);return;}
+    if(taskState.current?.state==="busy"){
+      traceClient({stage:"queue",reason:voiceInput?queuedTaskVoice.current?"queue-full":"queued":isTaskStatusQuestion(text)?"status":isTaskCancelRequest(text)?"cancel":"busy"});
+      if(isTaskCancelRequest(text)){cancelCameraTask();localTaskReply(text,"The camera task was canceled.");return;}
+      if(voiceInput){if(!queuedTaskVoice.current){queuedTaskVoice.current={...voiceInput,text,withImage};setVoiceNote("Your follow-up will be heard after this camera task finishes. Use Cancel camera task to stop it.");}else setVoiceNote("One follow-up is already waiting. Please repeat this one after the task finishes.");}
+      else localTaskReply(text,isTaskStatusQuestion(text)?"Your camera task is still running. I will show the result when it finishes.":"Your camera task is still running. Ask again after it finishes, or cancel it first.");
+      return;
+    }
     if (voiceInput) recordVoice("turn-accepted", { reason: "lock-off" });
     if (lock.current) {
       if (visualJob.current || voiceInput) {
@@ -387,10 +488,15 @@ export function CompanionHome({
           return;
         }
       }
-      if(!instructionsUrl && /\b(?:just ideas|text.only)\b/i.test(text)){
+      if(toolsEnabled&&!instructionsUrl&&isTaskStatusQuestion(text)){
+        traceClient({stage:"route",reason:"status",count:text.length});
+        const task=taskState.current;
+        localTaskReply(text,task?.state==="result"?(task.kind==="generated"?"Your image is ready.":`The task finished. ${task.title}. ${task.detail}`):task?.state==="error"?`The task failed. ${task.detail}`:task?.state==="canceled"?"The camera task was canceled.":"No camera task is running. Tell me what you would like to do.");return;
+      }
+      if(!toolsEnabled && !instructionsUrl && /\b(?:just ideas|text.only)\b/i.test(text)){
         skipLookRouting=true;setLookRequest("");setLookAccepted(false);
       }
-      const followup=!instructionsUrl&&!skipLookRouting&&lookRequest?lookFollowup(text,lookPrompt||lookRequest):null;
+      const followup=!toolsEnabled&&!instructionsUrl&&!skipLookRouting&&lookRequest?lookFollowup(text,lookPrompt||lookRequest):null;
       if(followup){
         setQuestion("");
         let reply="";
@@ -410,7 +516,7 @@ export function CompanionHome({
         stopSpeech();if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
         return;
       }
-      if(!instructionsUrl && !skipLookRouting && wantsLookPreview(text)){
+      if(!toolsEnabled && !instructionsUrl && !skipLookRouting && wantsLookPreview(text)){
         const direct=lookFollowup(text,text)?.kind==="photo";
         setLookRequest(text.slice(0,1500));setLookPrompt(text.slice(0,1500));setLookAccepted(direct);setLookVersion(version=>version+1);setQuestion("");
         const offer=direct?"Capture the current Glint camera view in the look preview, describe the look, then press Generate preview.":"I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
@@ -418,14 +524,14 @@ export function CompanionHome({
         stopSpeech();if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
         return;
       }
-      const intent = !instructionsUrl ? trackingIntent(text) : null;
-      if (!instructionsUrl && trackingPromptRef.current.requested && cancelsTracking(text)) {
+      const intent = !toolsEnabled && !instructionsUrl ? trackingIntent(text) : null;
+      if (!toolsEnabled && !instructionsUrl && trackingPromptRef.current.requested && cancelsTracking(text)) {
         setQuestion(""); setTrackingRequested(false); setTrackConcept(""); setTrackProblem("");
         stopSpeech();
         setMessages(items => [...items, {who:"you",text}, {who:"glint",text:"Movement check canceled. What would you like to do next?"}].slice(-20) as Message[]);
         return;
       }
-      const clarifying = trackingPromptRef.current.requested && !trackingPromptRef.current.concept
+      const clarifying = !toolsEnabled && trackingPromptRef.current.requested && !trackingPromptRef.current.concept
         ? clarifyTrackingObject(text) : null;
       if (intent || clarifying) {
         setQuestion("");
@@ -476,12 +582,15 @@ export function CompanionHome({
             ].slice(-20) as Message[]),
       );
       let streamed = false;
+      let selectedVoice: "neural" | "none" | null = null;
+      let pendingDeviceText = "";
       const replyTurn = voiceInput ? diagnosticTurn.current : 0;
       replyDiagnosticTurn.current = replyTurn;
       if (voiceInput) recordVoice("reply-dispatched", {}, replyTurn);
       neuralReply.current = false;
       setVoiceNote("");
       delete document.body.dataset.voiceMode;
+      traceClient({stage:"route",reason:"normal",count:text.length});
       const result = await streamAgent(
         current.current.csrf,
         {
@@ -499,6 +608,7 @@ export function CompanionHome({
           model: model || current.current.key.models[0],
           voice: isNeuralVoiceEnabled() ? "neural" : "off",
           lookPreview:lookRequest&&!skipLookRouting?{request:lookPrompt,stage:lookAccepted?"photo-controls":"offered"}:undefined,
+          cameraTools:toolsEnabled&&!instructionsUrl?{camera:camera.active,tracking:trackingAllowedRef.current,lastImage:taskRunner.current?.imageAvailable??false,activeCheck:taskRunner.current?.activeCheck,lastResult:lastTaskSummary.current||undefined}:undefined,
           requestId: crypto.randomUUID(),
         },
         controller.signal,
@@ -527,7 +637,9 @@ export function CompanionHome({
               },
             ].slice(-20) as Message[];
           });
-          if (aloud.current && !neuralReply.current) speech.current?.push(delta);
+          if (selectedVoice === "none") {
+            if (aloud.current) speech.current?.push(delta);
+          } else if (selectedVoice === null) pendingDeviceText += delta;
         },
         () => {
           if (voiceInput) recordVoice("first-text", {}, replyTurn);
@@ -536,7 +648,12 @@ export function CompanionHome({
             timing.modelFirstTokenMs = Date.now();
         },
         (mode) => {
+          if (controller.signal.aborted || token !== generation.current || epoch !== current.current.epoch) return;
+          selectedVoice = mode;
           neuralReply.current = mode === "neural";
+          if (mode === "neural") speech.current?.cancel();
+          else if (aloud.current && pendingDeviceText) speech.current?.push(pendingDeviceText);
+          pendingDeviceText = "";
           document.body.dataset.voiceMode = mode;
           setVoiceNote(
             mode === "neural"
@@ -588,7 +705,7 @@ export function CompanionHome({
       setMessages((items) => {
         const final: Message = {
           who: "glint",
-          text: result.message,
+          text: result.action?actionMessage(result.action):result.message,
           sources: result.sources,
           snapshot: result.snapshot,
         };
@@ -596,6 +713,15 @@ export function CompanionHome({
           ? [...items.slice(0, -1), final]
           : [...items, final].slice(-20);
       });
+      if (selectedVoice === null && !result.action && aloud.current && pendingDeviceText)
+        speech.current?.push(pendingDeviceText);
+      if(result.action){
+        request.current=null;lock.current=false;setBusy(false);
+        setConversationOpen(false);setSettingsOpen(false);taskQuestion.current=text;
+        if(aloud.current&&!streamed&&!neuralReply.current){speech.current?.push(actionMessage(result.action));speech.current?.finish();}
+        await taskRunner.current?.run(result.action,frames?.length?frames:image&&capturedAt?[{image,capturedAt}]:[]);
+        return;
+      }
       if (instructionsUrl) closeLink();
       if (aloud.current) {
         if (!streamed && !neuralReply.current)
@@ -638,8 +764,13 @@ export function CompanionHome({
   }
   const sendRef = useRef(send);
   sendRef.current = send;
-  async function captureLook():Promise<Blob>{
+  async function captureLook(signal?:AbortSignal):Promise<Blob>{
     const video=camera.video.current,token=generation.current;
+    const initialSource=video?.srcObject,deadline=Date.now()+3000;
+    while(video&&initialSource&&video.srcObject===initialSource&&(!cameraActive.current||video.readyState<2||!video.videoWidth)&&Date.now()<deadline){
+      signal?.throwIfAborted();await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    signal?.throwIfAborted();
     if(!cameraActive.current||!video?.srcObject||video.readyState<2||!video.videoWidth)
       throw Error("The camera is not ready. Open Glint camera and wait for the live view.");
     const source=video.srcObject;
@@ -665,6 +796,54 @@ export function CompanionHome({
       return result;
     }finally{if(request.current===controller){request.current=null;lock.current=false;setBusy(false);}}
   }
+  async function taskApi(path:string,body:Record<string,unknown>,signal:AbortSignal){
+    signal.throwIfAborted();const epoch=current.current.epoch;
+    const result=await api(path,{...body,epoch,requestId:crypto.randomUUID()},"POST",signal) as Record<string,unknown>;
+    if(signal.aborted||result.epoch!==current.current.epoch)throw Error("The camera task was canceled.");
+    return result;
+  }
+  taskDeps.current={
+    session:()=>camera.video.current?.srcObject??null,
+    visible:()=>!document.hidden,
+    busy:()=>lock.current||followupWorking.current||mic.recording||mic.preparing,
+    now:Date.now,
+    capture:async signal=>{traceClient({stage:"capture-start"});const start=performance.now();signal.throwIfAborted();const blob=await captureLook(signal);signal.throwIfAborted();const image=await asDataUrl(blob);traceClient({stage:"capture-end",durationMs:Math.round(performance.now()-start)});return {image,capturedAt:Date.now()};},
+    edit:async(image,prompt,signal)=>{traceClient({stage:"image-encode-start"});const start=performance.now();const photo=await jpegPhoto(imageDataBlob(image));traceClient({stage:"image-encode-end",durationMs:Math.round(performance.now()-start)});signal.throwIfAborted();const result=await taskApi("look-preview",{photo,prompt,consent:true},signal);return String(result.image);},
+    track:async(concept,signal)=>{
+      if(!trackingAllowedRef.current)throw Error("Object analysis is disabled. Enable it in Settings first.");
+      setTracking("recording");const clip=await camera.recordClip(signal);signal.throwIfAborted();setTracking("analyzing");
+      const result=await taskApi("track",{...clip,concept},signal) as unknown as ObjectMotion;
+      setObjectMotion(result);setLastTrackingClip(clip.clip);
+      return `${result.direction.replaceAll("-"," ")} relative to the camera. ${result.reason}`;
+    },
+    check:async(condition,frame,signal)=>{
+      const result=await taskApi("condition-check",{condition,photo:frame.image,capturedAt:frame.capturedAt,model:model||current.current.key.models[0]},signal);
+      const parsed=conditionResult.safeParse({verdict:result.verdict,summary:result.summary});
+      if(!parsed.success)throw Error("The camera check response could not be verified.");
+      return parsed.data;
+    },
+    begin:controller=>{request.current=controller;lock.current=true;setBusy(true);},
+    end:controller=>{if(request.current===controller){request.current=null;lock.current=false;setBusy(false);setTracking(null);}
+      const queued=queuedTaskVoice.current,token=generation.current;queuedTaskVoice.current=null;
+      if(queued)setTimeout(()=>{if(token!==generation.current)return;setVoiceNote("");void sendRef.current(queued.text,undefined,queued.withImage,queued);},0);
+    },
+    event:event=>{
+      traceClient({stage:"task",state:event.state});
+      taskState.current=event;setCameraTask(event);
+      if(event.state==="result"||event.state==="error"||event.state==="canceled"){
+        lastTaskSummary.current=event.kind==="generated"?`${event.state}: image generation.`:`${event.state}: ${event.kind??"task"}: ${event.detail}`.slice(0,700);
+        if(event.kind!=="annotated"||event.state!=="result")setMessages(items=>[...items,{who:"glint",text:event.kind==="generated"?event.title:`${event.title}. ${event.detail}`}].slice(-20) as Message[]);
+        if(aloud.current&&(event.kind!=="annotated"||event.state!=="result")){stopSpeech();speech.current?.push(event.title+". "+(event.kind==="check"?event.detail:""));speech.current?.finish();}
+      }
+    },
+  };
+  if(!taskRunner.current)taskRunner.current=new CameraTaskRunner({
+    session:()=>taskDeps.current!.session(),visible:()=>taskDeps.current!.visible(),busy:()=>taskDeps.current!.busy(),now:()=>taskDeps.current!.now(),
+    capture:signal=>taskDeps.current!.capture(signal),edit:(image,prompt,signal)=>taskDeps.current!.edit(image,prompt,signal),track:(concept,signal)=>taskDeps.current!.track(concept,signal),check:(condition,frame,signal)=>taskDeps.current!.check(condition,frame,signal),
+    begin:controller=>taskDeps.current!.begin(controller),end:controller=>taskDeps.current!.end(controller),event:event=>taskDeps.current!.event(event),
+  });
+  useEffect(()=>()=>{followupController.current?.abort();imageFollowups.current=[];taskRunner.current?.dispose();},[]);
+  useEffect(()=>{taskRunner.current?.cameraChanged();},[camera.active,camera.facingMode]);
   async function trackObject() {
     if(!current.current.key.connected){connect();return;}
     if(!trackingAllowedRef.current || !camera.active || tracking || trackingStart.current)return;
@@ -702,6 +881,7 @@ export function CompanionHome({
     }
   }
   function openLaneForTurn() {
+    if(taskState.current?.state==="busy"&&taskState.current.kind!=="generated")return;
     if (!streamingMode.current) return;
     const flush = turns.current.started();
     if (flush) {
@@ -714,6 +894,7 @@ export function CompanionHome({
   }
   const mic = useMicrophone(
     (audio, stats) => {
+      localSpeechActive.current=false;
       diagnosticEnds.current.set(diagnosticTurn.current, performance.now());
       if (diagnosticEnds.current.size > 120)
         diagnosticEnds.current.delete(diagnosticEnds.current.keys().next().value!);
@@ -730,10 +911,12 @@ export function CompanionHome({
         voicePlayer.current?.resume();
         return;
       }
+      if(taskState.current?.state==="busy"&&taskState.current.kind!=="generated"){void send("",undefined,camera.active,{audio});return;}
       if (streamingMode.current) {
         const decision = turns.current.wavReady(audio);
         // Dropped turns send nothing and get no check; the rest verify.
         if (decision === "fallback") {
+          traceClient({stage:"voice",reason:"fallback"});
           void send("", undefined, camera.active, {
             audio,
             note: "Sent as a voice recording (live transcription unavailable).",
@@ -746,6 +929,7 @@ export function CompanionHome({
     onProblem,
     () => {
       if (bargeGuard.current?.turnStarted()) return;
+      localSpeechActive.current=true;
       diagnosticTurn.current++;
       diagnosticPartial.current = false;
       recordVoice("speech-start");
@@ -753,6 +937,7 @@ export function CompanionHome({
         capturedStartMs: Date.now(),
         duringSpeech: speaking,
       };
+      if(taskState.current?.state==="busy"){if(taskState.current.kind==="generated"){stopSpeech(true);setVoiceNote("Listening while your image is created.");openLaneForTurn();}return;}
       bargeAlive.current = true;
       bargeVoicedMs.current = 0;
       if (!(lock.current || speaking)) {
@@ -803,7 +988,7 @@ export function CompanionHome({
       endSilenceMs: () =>
         isTurnComplete(partial)
           ? COMPLETE_END_SILENCE_MS
-          : 1100,
+          : 1600,
       shouldExtend: () => isTurnContinuation(partial),
       onSpeechProgress: (voicedMs) => { bargeVoicedMs.current = voicedMs; },
       onMlStatus: (ready, reason) => {
@@ -819,6 +1004,7 @@ export function CompanionHome({
         );
       },
       onSpeechEnd: (turnSent) => {
+        localSpeechActive.current=false;
         bargeAlive.current = false;
         // A dropped burst produced no audio and sends nothing, so it must
         // not kill the reply: resume where the soft-stop paused. Sent turns
@@ -836,6 +1022,7 @@ export function CompanionHome({
     },
   );
   const cancelWork = useCallback((softSpeech = false) => {
+    if(!softSpeech){followupController.current?.abort();imageFollowups.current=[];queuedTaskVoice.current=null;if(taskState.current?.state==="busy")taskState.current={...taskState.current,state:"canceled",title:"Task canceled",detail:"The camera task was interrupted."};taskRunner.current?.cancelForeground();setCameraTask(task=>task?.state==="busy"?null:task);}
     setTracking(null);
     if (!softSpeech && activeVoice.current) {
       logTiming(activeVoice.current);
@@ -911,11 +1098,12 @@ export function CompanionHome({
       mic.recording ||
       mic.preparing ||
       lock.current ||
+      followupWorking.current ||
       speaking
     )
       return;
     pendingVisualEvent.current = null;
-    if (visionPaused || Date.now() < nextObservation.current) return;
+    if(!backgroundChecks||backgroundCalls.current>=20||current.current.calls>=current.current.limit-10||document.hidden||visionPaused||Date.now()<nextObservation.current)return;
     const recent = camera.recent();
     if (recent.length < 2) return;
     const controller = new AbortController(),
@@ -925,7 +1113,9 @@ export function CompanionHome({
     lock.current = true;
     visualJob.current = true;
     setObserving(true);
-    nextObservation.current = Date.now() + 6000;
+    nextObservation.current = Date.now() + 30000;
+    backgroundCalls.current++;
+    traceClient({stage:"observation",count:backgroundCalls.current,calls:current.current.calls});
     try {
       const frames = await encodeCameraFrames(recent);
       if (
@@ -1015,6 +1205,10 @@ export function CompanionHome({
         note: "Sent as a voice recording (live transcription unavailable).",
       });
     const finishStreamed = (transcript: string) => {
+      // A provider final can precede the local endpoint. Its text may omit
+      // the rest of the utterance, so use the complete bounded WAV instead.
+      if(localSpeechActive.current){traceClient({stage:"voice",reason:"early-final"});turns.current.streamFailed();voice.current?.closeStream();return;}
+
       if (!turns.current.finalArrived()) return;
       recordVoice("asr-final");
       setPartial("");
@@ -1143,6 +1337,23 @@ export function CompanionHome({
     setEnded(false); setProblem("");
     await camera.start();
   };
+  async function openTaskCamera(){
+    const version=++taskCameraVersion.current;taskCameraOpening.current=true;
+    try{await openCamera();if(version!==taskCameraVersion.current||!camera.video.current?.srcObject)return;
+      if(taskRunner.current?.hasPending)await taskRunner.current.resume();
+      else if(taskQuestion.current)await send(taskQuestion.current,undefined,true);
+    }finally{if(version===taskCameraVersion.current)taskCameraOpening.current=false;}
+  }
+  function cancelCameraTask(){
+    taskCameraVersion.current++;queuedTaskVoice.current=null;taskState.current=null;
+    if(taskCameraOpening.current){taskCameraOpening.current=false;camera.stop();}
+    taskRunner.current?.cancelForeground();taskRunner.current?.cancelWatch();void interrupt(false);setCameraTask(null);
+  }
+  async function newCallSession(){
+    endSession();if(pause.current)await pause.current;
+    try{const fresh=await api("session/reset",{},"POST") as View;current.current=fresh;onView(fresh);setMessages([]);backgroundCalls.current=0;setBackgroundChecks(false);setEnded(false);setProblem("");}
+    catch(error){setProblem(error instanceof Error?error.message:"The new session could not start.");}
+  }
   const toggleMic = () => {
     if (mic.enabled) { mic.cancel(); return; }
     speech.current?.unlock(); voicePlayer.current?.unlock();
@@ -1151,6 +1362,8 @@ export function CompanionHome({
     void mic.start();
   };
   const endSession = () => {
+    taskCameraVersion.current++;taskCameraOpening.current=false;queuedTaskVoice.current=null;taskState.current=null;
+    taskRunner.current?.reset();setCameraTask(null);lastTaskSummary.current="";
     camera.stop(); mic.cancel(); stopSpeech();
     setTrackingRequested(false); setLastTrackingClip(null); setObjectMotion(null);
     setLookRequest("");setLookAccepted(false);
@@ -1192,7 +1405,7 @@ export function CompanionHome({
   const composer = <form className="companion-input glint-composer" onSubmit={submit}>
     <label className="sr-only" htmlFor="companion-question">Message Glint</label>
     <input id="companion-question" value={question} maxLength={2000} placeholder="Ask anything about your task…" onChange={event => setQuestion(event.target.value)} onFocus={() => { if (speaking) stopSpeech(); }}/>
-    <button className="glint-send" aria-label="Send message" disabled={!question.trim() || busy || !!tracking || !online}><ArrowUp size={22}/></button>
+    <button className="glint-send" aria-label="Send message" disabled={!question.trim() || (busy && cameraTask?.state!=="busy") || (!!tracking && cameraTask?.state!=="busy") || !online}><ArrowUp size={22}/></button>
   </form>;
   return (
     <section className={`companion-home glint-ui ${camera.active ? "has-camera" : ""}`} aria-label="Talk with Glint">
@@ -1252,6 +1465,7 @@ export function CompanionHome({
         <footer className="glint-attribution"><Sparkles size={13}/> Built with Meta models <span>See · Understand · Guide</span></footer>
       </>}
       </div>
+      {toolsEnabled&&<CameraTaskPanel task={cameraTask} onClose={()=>{setCameraTask(null);taskRunner.current?.dismissPending();}} onCancel={cancelCameraTask} onOpenCamera={openTaskCamera}/>}
       <dialog ref={conversationDialog} className="glint-sheet glint-conversation" aria-label="Conversation" onCancel={() => setConversationOpen(false)}>
         <div className="glint-sheet-handle"/>
         <header className="glint-sheet-header"><div><p className="glint-eyebrow">YOUR CURRENT SESSION</p><h2><MessageCircle size={21}/> Conversation</h2></div><button className="glint-round" aria-label="Close conversation" onClick={() => setConversationOpen(false)}><X size={21}/></button></header>
@@ -1291,12 +1505,15 @@ export function CompanionHome({
           <label className="glint-setting-row"><span><Captions size={20}/><span>Captions<small>Show spoken replies on screen</small></span></span><input type="checkbox" checked={subsOn} onChange={event => { setSubsOn(event.target.checked); saveSubtitlesEnabled(event.target.checked); }}/></label>
           <div className="glint-setting-row"><span><MessageCircle size={20}/><span>Speech language<small>Automatic · English and Telugu</small></span></span></div>
           <label className="glint-setting-row"><span><Camera size={20}/><span>Allow object analysis<small>Only when you ask and start a check</small></span></span><input type="checkbox" checked={trackingAllowed} onChange={event => { setTrackingAllowed(event.target.checked); if (tracking && !event.target.checked) void interrupt(false); }}/></label>
-          <p className="glint-setting-note">Camera on: recent images are checked automatically to support your questions. Object movement uses a separate, explicit short-clip check.</p>
+          <p className="glint-setting-note">Camera frames support your visual questions. Background checks are optional and off by default. Object movement uses a separate requested clip.</p>
           <h3>Your connection</h3>
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); connect(); }}><span>{view.key.connected ? "Model connected" : "Connect model"}<small>Manage your temporary API key</small></span><ChevronLeft className="glint-next" size={18}/></button>
+          <label className="glint-setting-row"><span>Background camera checks<small>Optional; every 30 seconds, up to 20 per page; reserves 10 calls for requests</small></span><input type="checkbox" checked={backgroundChecks} onChange={event=>setBackgroundChecks(event.target.checked)}/></label>
           <p className="glint-setting-note">{view.calls} of {view.limit} session calls used. Camera checks also use this allowance.</p>
+          <button className="glint-text" disabled={!online} onClick={()=>void newCallSession()}>Start a new call allowance</button><small>Ends this session, clears conversation and images, resets the allowance, and disconnects your key. Provider charges still apply.</small>
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); openLink(); }}><span>Add instructions link<small>Use a public product page or manual</small></span><Link size={18}/></button>
-          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates photo previews only after you choose a photo and press Generate. Local Kokoro generates speech with device-voice fallback.</p></details>
+          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates requested previews from the camera or a previous result. Ambiguous requests need clarification. Local Kokoro generates speech with device-voice fallback.</p></details>
+          <details className="glint-advanced"><summary>Diagnostic trace</summary><p>Automatic event tracing records request timing, speech stages, task states, routing and failures. No conversation text, keys, audio or images. The latest 500 browser events and 500 events per server source stay in memory; server events also appear in local server logs. Download after a problem, before closing the page or restarting.</p><button className="glint-text" onClick={()=>void downloadTrace()}>Download diagnostic trace</button>{traceStatus&&<p role="status">{traceStatus}</p>}</details>
           <details className="voice-diagnostics glint-advanced"><summary>Voice test diagnostics</summary><p>Optional event names and timings only. No audio, transcript, images, voiceprints or keys. Up to 120 events remain in this page; shared events appear in server logs.</p>
             <label className="glint-setting-row"><span>Record and share voice diagnostics</span><input type="checkbox" checked={diagnosticsOn} onChange={event => { if (event.target.checked) { diagnostics.current.start(); setDiagnosticEvents([]); } else diagnostics.current.stop(); setDiagnosticUpload(""); setDiagnosticsOn(event.target.checked); }}/></label>
             {diagnosticUpload && <p role="status">{diagnosticUpload}</p>}

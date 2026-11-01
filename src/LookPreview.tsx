@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { LookPreviewResult } from "../shared/look-preview";
 
-async function jpegPhoto(blob: Blob): Promise<string> {
+/** Decode local image bytes without a network fetch (production CSP is self-only). */
+export function imageDataBlob(data: string): Blob {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(data);
+  if (!match || data.length > 14000000) throw Error("This image could not be opened.");
+  const binary = atob(match[2]);
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  return new Blob([bytes], { type: match[1] });
+}
+
+export async function jpegPhoto(blob: Blob): Promise<string> {
   if(!["image/jpeg","image/png","image/webp"].includes(blob.type) || blob.size>10000000)
     throw Error("Choose a JPEG, PNG or WebP photo smaller than 10 MB.");
   const image=await createImageBitmap(blob);
@@ -54,7 +63,7 @@ export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromp
     setBusy(true);setError("");
     try{
       // Refinements reattach only the last displayed preview, without server storage.
-      const source=result?await jpegPhoto(await(await fetch(result)).blob()):photo;
+      const source=result?await jpegPhoto(imageDataBlob(result)):photo;
       if(!alive.current||job.current!==token)return;
       const next=await generate(source,prompt.trim());
       if(alive.current&&job.current===token)setResult(next.image);

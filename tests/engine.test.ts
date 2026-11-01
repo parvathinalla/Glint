@@ -461,3 +461,13 @@ describe("streaming voice lane", () => {
     }
   });
 });
+
+it("explicitly resets the call allowance and drops the key and prior conversation",async()=>{
+ const e=create(),s=e.session().session;await e.connect(s,"TEST_ONLY_KEY");
+ s.calls=100;s.tokens=200;s.agentHistory=[{role:"user",content:"old conversation"}];
+ s.seen.add("old-request");const oldEpoch=s.epoch;
+ const view=e.resetCallSession(s);
+ expect(view.calls).toBe(0);expect(view.key.connected).toBe(false);
+ expect(s.agentHistory).toEqual([]);expect(s.seen.size).toBe(0);
+ expect(s.epoch).toBeGreaterThan(oldEpoch);expect(s.controller).toBeUndefined();
+});

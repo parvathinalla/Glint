@@ -16,7 +16,7 @@ describe("local hands-free turn boundaries", () => {
     for (let i=0;i<7;i++) expect(detector.push(quiet,0.014,opts).ended).toBeUndefined();
     expect(detector.push(speech,0.014,opts).ended).toBeUndefined();
     let result = detector.push(quiet,0.014,opts);
-    for (let i=0;i<7;i++) result=detector.push(quiet,0.014,opts);
+    for (let i=0;i<11;i++) result=detector.push(quiet,0.014,opts);
     expect(result.audio).toBeDefined();
   });
   it("does not submit silence and detects two turns without a button press", () => {
@@ -215,6 +215,8 @@ describe("turn continuation signals", () => {
     ["because", true],
     ["tea or", true],
     ["go to", true],
+    ["I want to.", true],
+    ["Can you create a.", true],
     ["with my", true],
     ["the", true],
     ["I think that", true],

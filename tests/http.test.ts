@@ -1,3 +1,4 @@
+import * as voiceRuntime from "../server/tts-kokoro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
@@ -427,4 +428,40 @@ describe("HTTP isolation and validation", () => {
     ).text();
     expect(current).not.toContain("TEST_ONLY_KEY");
   });
+});
+
+it("requires session authorization and a matching origin to reset the allowance",async()=>{
+ const {call}=await fixture();
+ expect((await call("session/reset",{},{csrf:"wrong"})).status).toBe(403);
+ expect((await call("session/reset",{},{origin:"https://other.example"})).status).toBe(403);
+ const response=await call("session/reset");expect(response.status).toBe(200);
+ const view=await response.json();expect(view.calls).toBe(0);expect(view.key.connected).toBe(false);
+});
+
+it("exports only authorized session diagnostics with safe request correlation",async()=>{
+ const {call,cookie,base}=await fixture();
+ const phase=await call("phase",{phase:"paused"});
+ expect(phase.headers.get("x-glint-request-id")).toMatch(/^[a-f0-9-]{36}$/);
+ const uploaded=await call("diagnostics",{events:[{at:100,stage:"task",state:"busy"}]});expect(uploaded.status).toBe(200);
+ expect((await call("diagnostics",{events:[{at:100,stage:"task",text:"PRIVATE_TEXT"}]})).status).toBe(400);
+ expect((await call("diagnostics",{events:[]},{csrf:"wrong"})).status).toBe(403);
+ const exported=await(await fetch(base+"/api/diagnostics",{headers:{Cookie:cookie}})).json();
+ expect(exported.server.some((event:{operation:string})=>event.operation==="phase")).toBe(true);
+ expect(exported.client).toEqual([{at:100,stage:"task",state:"busy"}]);
+ expect(JSON.stringify(exported)).not.toContain("PRIVATE_TEXT");
+ expect(JSON.stringify(exported)).not.toContain(cookie.split("=")[1]);
+ const other=await fetch(base+"/api/session"),otherCookie=other.headers.get("set-cookie")!.split(";")[0];
+ const isolated=await(await fetch(base+"/api/diagnostics",{headers:{Cookie:otherCookie}})).json();expect(isolated.server).toEqual([]);expect(isolated.client).toEqual([]);
+});
+
+it("returns an image action without waiting for voice initialization or speaking tool arguments",async()=>{
+ let release!:(value:null)=>void;const waiting=new Promise<null>(resolve=>{release=resolve;});
+ const spy=vi.spyOn(voiceRuntime,"getServerVoice").mockReturnValue(waiting);
+ try{
+  const agent=new AgentProvider((async()=>Response.json({status:"completed",output:[{type:"function_call",status:"completed",call_id:"image-call",name:"edit_camera_image",arguments:JSON.stringify({prompt:"INTERNAL_IMAGE_PROMPT",source:"camera"})}]})) as typeof fetch);
+  const f=await fixture(undefined,agent),connected=await(await f.call("key",{key:"TEST_ONLY_KEY"})).json();
+  const response=await f.call("agent/stream",{question:"Create an image",model:"muse-spark-test",voice:"neural",epoch:connected.epoch,requestId:randomUUID(),cameraTools:{camera:true,tracking:false,lastImage:false}});
+  const text=await response.text();const events=text.split("\n\n").filter(block=>block.startsWith("data: ")).map(block=>JSON.parse(block.slice(6)));
+  const done=events.find(event=>event.type==="done");expect(done.reply.message).toBe("I’m creating your image.");expect(done.reply.message).not.toContain("INTERNAL_IMAGE_PROMPT");expect(events.some(event=>event.type==="audio")).toBe(false);expect(events.at(-1).type).toBe("done");
+ }finally{release(null);spy.mockRestore();}
 });

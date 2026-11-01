@@ -93,3 +93,31 @@ it("gives Spark the current look context after older conversation history",async
   expect(input.indexOf("lookPreviewContext")).toBeGreaterThan(input.indexOf("Older conversation."));
 });
 
+
+it("keeps one image running while transcription and a follow-up answer complete",async()=>{
+ let release!:()=>void,imageSignal!:AbortSignal;
+ const imageGate=new Promise<void>(resolve=>{release=resolve;});
+ const images=new ImageProvider((async(_url,init)=>{imageSignal=init!.signal as AbortSignal;await imageGate;return Response.json({status:"completed",output:[{type:"image_generation_call",status:"completed",result:png}]});}) as typeof fetch);
+ const agent=new AgentProvider((async url=>String(url).endsWith("/asr/transcribe")?Response.json({transcript:"How do I wave?"}):Response.json({status:"completed",output:[{type:"message",content:[{type:"output_text",text:"Move your hand side to side."}]}]})) as typeof fetch);
+ const engine=new Engine(new Store(":memory:"),{models:async()=>["muse-spark-test"],infer:async()=>{throw Error("Unexpected dispatch");}},Date.now,agent,{},new SamProvider(),images);engines.push(engine);
+ const session=engine.session().session;await engine.connect(session,"TEST_ONLY_KEY");
+ const input={photo:"reference",prompt:"A greeting",consent:true as const,epoch:session.epoch,requestId:randomUUID()};
+ const pending=engine.previewLook(session,input);
+ await expect(engine.previewLook(session,{...input,requestId:randomUUID()})).rejects.toMatchObject({code:"BUSY"});
+ expect((await engine.transcribe(session,new Uint8Array([1]),session.epoch,randomUUID())).transcript).toBe("How do I wave?");
+ const reply=await engine.converse(session,{question:"How do I wave?",model:"muse-spark-test",epoch:session.epoch,requestId:randomUUID(),cameraTools:{camera:true,tracking:false,lastImage:false,imageInProgress:true}});
+ expect(reply.message).toBe("Move your hand side to side.");expect(imageSignal.aborted).toBe(false);expect(engine.view(session).busy).toBe(true);
+ release();await expect(pending).resolves.toHaveProperty("image");expect(session.calls).toBe(3);expect(engine.view(session).busy).toBe(false);
+});
+it("canceling a follow-up request does not cancel the independent image",async()=>{
+ let imageRelease!:()=>void,textRelease!:()=>void;
+ const images=new ImageProvider((async()=>{await new Promise<void>(resolve=>{imageRelease=resolve;});return Response.json({status:"completed",output:[{type:"image_generation_call",status:"completed",result:png}]});}) as typeof fetch);
+ const agent=new AgentProvider((async()=>{await new Promise<void>(resolve=>{textRelease=resolve;});return Response.json({status:"completed",output:[{type:"message",content:[{type:"output_text",text:"Reply"}]}]});}) as typeof fetch);
+ const engine=new Engine(new Store(":memory:"),{models:async()=>["muse-spark-test"],infer:async()=>{throw Error("Unexpected dispatch");}},Date.now,agent,{},new SamProvider(),images);engines.push(engine);
+ const session=engine.session().session;await engine.connect(session,"TEST_ONLY_KEY");const epoch=session.epoch;
+ const image=engine.previewLook(session,{photo:"reference",prompt:"Greeting",consent:true,epoch,requestId:randomUUID()});
+ const requestId=randomUUID(),answer=engine.converse(session,{question:"Explain waving",model:"muse-spark-test",epoch,requestId,cameraTools:{camera:true,tracking:false,lastImage:false,imageInProgress:true}});
+ await expect(engine.transcribe(session,new Uint8Array([1]),epoch,randomUUID())).rejects.toMatchObject({code:"BUSY"});
+ engine.cancelConversationRequest(session,requestId);expect(session.imageController?.signal.aborted).toBe(false);expect(session.epoch).toBe(epoch);
+ textRelease();await expect(answer).rejects.toMatchObject({code:"CANCELED"});imageRelease();await expect(image).resolves.toHaveProperty("image");
+});

@@ -266,6 +266,19 @@ describe("voice stream lifecycle", () => {
       charged: () => charged,
     };
   }
+  it("uses client-delimited streaming and charges only the completed transcript",()=>{
+    const t=streamSetup();t.stream.open();t.ack(t.sockets[0]);
+    const handshake=JSON.parse(t.sockets[0].sent[0] as string);
+    expect(handshake.mode).toBe("PUSH_TO_TALK");
+    t.stream.audio(new Uint8Array([1,2]));
+    t.sockets[0].serverSend(JSON.stringify({type:"transcript",transcript:"I want to",final:false}));
+    expect(t.charged()).toBe(0);expect(t.events).toEqual(["partial:I want to"]);
+    t.stream.end();
+    expect(t.sockets[0].sent.some(value=>typeof value==="string"&&JSON.parse(value).type==="endStream")).toBe(true);
+    t.sockets[0].serverSend(JSON.stringify({type:"transcript",transcript:"I want to learn a greeting",final:true}));
+    t.sockets[0].serverSend(JSON.stringify({type:"transcript",transcript:"duplicate",final:true}));
+    expect(t.charged()).toBe(1);expect(t.events).toEqual(["partial:I want to","final:I want to learn a greeting"]);
+  });
   it("buffers audio until ready, then flushes in order", () => {
     const t = streamSetup();
     t.stream.open();

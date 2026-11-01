@@ -126,7 +126,7 @@ export class VoicePlayer {
     this.generation++;
     this.stopCurrent();
     this.active = false;
-    this.paused = this.queue.length > 0;
+    this.paused = true;
     this.robot.softStop();
     this.robotSpeaking = false;
   }

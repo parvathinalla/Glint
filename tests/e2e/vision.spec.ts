@@ -52,7 +52,7 @@ test("camera observes silently without a question and sends frame history with q
   page,
   context,
 }) => {
-  test.setTimeout(45000);
+  test.setTimeout(90000);
   await context.grantPermissions(["camera"]);
   await page.routeWebSocket("**/events", () => {});
   let view: Record<string, unknown>,
@@ -160,6 +160,9 @@ test("camera observes silently without a question and sends frame history with q
   });
   await page.goto("/");
   await setSpokenReplies(page,false);
+  await page.getByRole("button",{name:"Open settings",exact:true}).click();
+  await page.getByRole("checkbox",{name:/Background camera checks/}).check();
+  await page.getByRole("button",{name:"Close settings",exact:true}).click();
   await openCameraFullscreen(page);
   await page
     .getByRole("button", { name: "Exit full screen camera", exact: true })
@@ -173,7 +176,7 @@ test("camera observes silently without a question and sends frame history with q
   await page.evaluate(() => {
     (window as unknown as { raised: boolean }).raised = true;
   });
-  await expect.poll(() => observations, { timeout: 15000 }).toBeGreaterThan(seenBefore);
+  await expect.poll(() => observations, { timeout: 35000 }).toBeGreaterThan(seenBefore);
   await page.waitForTimeout(1000);
   await expect(page.getByText("Hi! I saw you raise your hand.", { exact: true })).toHaveCount(0);
   await expect(page.getByText("It looks like you're stirring ingredients.", { exact: true })).toHaveCount(0);

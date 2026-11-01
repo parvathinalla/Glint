@@ -1,6 +1,8 @@
 import express from "express";
 import helmet from "helmet";
-import { timingSafeEqual } from "node:crypto";
+import {acceptClientTrace,sessionDiagnostics,traceServer} from "./diagnostics";
+import {diagnosticBatch,diagnosticOperation} from "../shared/diagnostics";
+import { randomUUID,timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { Engine, type Session } from "./engine.ts";
 import { Problem } from "./provider.ts";
@@ -10,6 +12,7 @@ import { getServerVoice } from "./tts-kokoro.ts";
 import { trackInput } from "../shared/object-motion.ts";
 import { voiceDiagnosticBatch } from "../shared/voice-diagnostics.ts";
 import { lookPreviewInput } from "../shared/look-preview.ts";
+import {conditionInput} from "../shared/camera-tools";
 
 export const cookieToken = (header = "") =>
   header
@@ -264,6 +267,17 @@ export function createApp(engine: Engine, origin: string, production = false) {
     next();
   });
   app.use(express.json({ limit: "1mb", strict: true }));
+  app.use("/api",(req,res,next)=>{
+    const session=engine.existing(cookieToken(req.headers.cookie));
+    if(!session||req.path.startsWith("/diagnostics")||req.path==="/voice-diagnostics")return next();
+    const id=z.string().uuid().safeParse(req.body?.requestId);
+    const requestId=id.success?id.data:randomUUID(),operation=diagnosticOperation(req.path.slice(1)),start=Date.now();
+    res.setHeader("x-glint-request-id",requestId);
+    traceServer(session,{stage:"request-start",operation,requestId,calls:session.calls});
+    let finished=false;
+    const complete=(closed:boolean)=>{if(finished)return;finished=true;traceServer(session,{stage:closed?"request-error":"request-end",operation,requestId,status:res.statusCode,durationMs:Date.now()-start,calls:session.calls,...(closed?{reason:"canceled" as const}:{})});};
+    res.on("finish",()=>complete(false));res.on("close",()=>complete(!res.writableEnded));next();
+  });
   app.get("/api/session", (req, res) => {
     const { session, token } = engine.session(cookieToken(req.headers.cookie));
     if (token)
@@ -320,6 +334,15 @@ export function createApp(engine: Engine, origin: string, production = false) {
       console.info(`[glint-client-voice] ${JSON.stringify(event)}`);
     res.json({ accepted: batch.events.length });
   });
+  const traceRates=new WeakMap<Session,{at:number;count:number}>();
+  app.get("/api/diagnostics",(_req,res)=>res.json(sessionDiagnostics(s(res))));
+  app.post("/api/diagnostics",(req,res)=>{
+    const batch=diagnosticBatch.parse(req.body),session=s(res),now=Date.now();
+    let rate=traceRates.get(session);if(!rate||now-rate.at>=60000){rate={at:now,count:0};traceRates.set(session,rate);}
+    if(rate.count+batch.events.length>1200)throw new Problem(429,"DIAGNOSTIC_LIMIT","Diagnostic event limit reached.");
+    rate.count+=batch.events.length;acceptClientTrace(session,batch.events);res.json({accepted:batch.events.length});
+  });
+  app.post("/api/session/reset",(_req,res)=>res.json(engine.resetCallSession(s(res))));
   app.post("/api/track", async(req,res)=>{
     const input=trackInput.parse(req.body),session=s(res);
     res.on("close",()=>{
@@ -334,6 +357,11 @@ export function createApp(engine: Engine, origin: string, production = false) {
       if(!res.writableEnded && session.seen.has(input.requestId) && session.epoch===input.epoch)engine.phase(session,"paused");
     });
     res.json(await engine.previewLook(session,input));
+  });
+  app.post("/api/condition-check",async(req,res)=>{
+    const input=conditionInput.parse(req.body),session=s(res);validateCameraImage(input.photo);
+    res.on("close",()=>{if(!res.writableEnded&&session.seen.has(input.requestId)&&session.epoch===input.epoch)engine.phase(session,"paused");});
+    res.json(await engine.checkCondition(session,input));
   });
   app.post("/api/observe", async (req, res) => {
     const input = observeInput.parse(req.body);
@@ -407,8 +435,10 @@ export function createApp(engine: Engine, origin: string, production = false) {
         if (!finished && tts)
           console.info("[glint-voice] reply connection closed before voice finished");
         tts?.cancel();
-        if (!finished && session.epoch === input.epoch)
-          engine.phase(session, "paused");
+        if (!finished && session.epoch === input.epoch){
+          if(input.cameraTools?.imageInProgress)engine.cancelConversationRequest(session,input.requestId);
+          else engine.phase(session,"paused");
+        }
       });
       try {
         const replyPromise = engine.converse(session, input, (text) => {
@@ -417,8 +447,14 @@ export function createApp(engine: Engine, origin: string, production = false) {
           if (tts) tts.push(text);
           else buffered += text;
         });
-        if (input.voice === "neural") {
-          const voice = await getServerVoice();
+        const voiceReady=input.voice==="neural"?getServerVoice().catch(()=>null):null;
+        const planned=input.cameraTools?await replyPromise:undefined;
+        if(planned?.action){
+          // Tool execution must not wait for synthesis or expose tool arguments.
+          emit({type:"voice",mode:"none"});emit({type:"done",reply:planned});finished=true;return;
+        }
+        if (voiceReady) {
+          const voice = await voiceReady;
           if (voice && !res.destroyed) {
             tts = new TtsStream(
               voice,
@@ -435,7 +471,7 @@ export function createApp(engine: Engine, origin: string, production = false) {
             buffered = "";
           } else emit({ type: "voice", mode: "none" });
         }
-        const reply = await replyPromise;
+        const reply = planned??await replyPromise;
         // Research and JSON provider responses do not emit text deltas.
         // Feed their final text to the same voice pipeline exactly once.
         if (tts && !receivedText) tts.push(reply.message);
@@ -571,6 +607,13 @@ export function createApp(engine: Engine, origin: string, production = false) {
       res: express.Response,
       _next: express.NextFunction,
     ) => {
+      const session=res.locals.session as Session|undefined;
+      if(session&&!_req.path.startsWith("/api/diagnostics")&&_req.path!=="/api/voice-diagnostics"){
+        const code=error instanceof Problem?error.code:"";
+        const reason=code==="APP_LIMIT"?"limit":code==="BUSY"?"busy":code==="CANCELED"?"canceled":error instanceof z.ZodError?"invalid":"http";
+        const id=z.string().uuid().safeParse(res.getHeader("x-glint-request-id"));
+        traceServer(session,{stage:"request-error",...(id.success?{requestId:id.data}:{}),operation:diagnosticOperation(_req.path.replace(/^\/api\//,"")),status:error instanceof Problem?error.status:error instanceof z.ZodError?400:502,reason,calls:session.calls});
+      }
       if (error instanceof Problem)
         return res
           .status(error.status)

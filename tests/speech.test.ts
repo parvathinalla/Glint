@@ -313,3 +313,11 @@ it("reports each spoken phrase as it starts", () => {
   spoken[0].onend();
   expect(phrases).toEqual(["First.", "Second."]);
 });
+
+it("holds new text arriving after an empty-queue soft stop until resume", () => {
+  const spoken:string[]=[];
+  vi.stubGlobal("window",{speechSynthesis:{speak:(u:{text:string})=>spoken.push(u.text),cancel(){}}});
+  vi.stubGlobal("SpeechSynthesisUtterance",class{constructor(public text:string){}});
+  const queue=new SpeechQueue(()=>{});queue.softStop();queue.push("Late sentence.");queue.finish();
+  expect(spoken).toEqual([]);queue.resume();expect(spoken).toEqual(["Late sentence."]);
+});

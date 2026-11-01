@@ -232,3 +232,12 @@ it("the neural voice kill switch reads live from localStorage", () => {
   store["glint-neural-voice"] = "0";
   expect(isNeuralVoiceEnabled()).toBe(false);
 });
+
+it("keeps late audio and fallback paused when barge-in starts with an empty queue", () => {
+  const {player,sources,utterances}=stage();player.unlock();player.softStop();
+  player.playAudio({seq:0,text:"Late sentence.",pcm:pcmBase64(120),sampleRate:24000});
+  player.audioError("Late fallback.");player.finish();
+  expect(sources).toHaveLength(0);expect(utterances).toHaveLength(0);
+  player.resume();expect(sources).toHaveLength(1);
+  sources[0].onended!();expect(utterances.map(x=>x.text)).toEqual(["Late fallback."]);
+});

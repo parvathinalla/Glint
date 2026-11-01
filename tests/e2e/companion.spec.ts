@@ -311,8 +311,8 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
   });
 });
 
-for (const losesAudio of [false, true]) {
-test(`streaming voice ${losesAudio ? "uses the complete recording after an audio gap" : "shows partials and sends without a file upload"} (mock socket)`, async ({
+for (const losesAudio of [false, true, "early"] as const) {
+test(`streaming voice ${losesAudio==="early" ? "uses the complete recording after an early final" : losesAudio ? "uses the complete recording after an audio gap" : "shows partials and sends without a file upload"} (mock socket)`, async ({
   page,
   context,
 }) => {
@@ -352,7 +352,7 @@ test(`streaming voice ${losesAudio ? "uses the complete recording after an audio
         if (!partialSent) {
           partialSent = true;
           if (losesAudio) {
-            ws.send(JSON.stringify({ type: "gap" }));
+            if(losesAudio===true)ws.send(JSON.stringify({ type: "gap" }));
             // A delayed, incomplete result must not create a second answer.
             ws.send(JSON.stringify({ type: "final", transcript: "organizer" }));
           } else ws.send(JSON.stringify({ type: "partial", text: "Help me" }));
@@ -704,6 +704,7 @@ test("a sent pop that transcribes empty resumes read-aloud", async ({
       page.evaluate(
         () => (window as unknown as { spoken: string[] }).spoken.length,
       ),
+      {timeout:10000},
     )
     .toBe(1);
   await page.waitForTimeout(600);

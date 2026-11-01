@@ -1,3 +1,4 @@
+import {traceServer} from "./diagnostics";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   canReport,
@@ -13,6 +14,9 @@ import { Store } from "./store.ts";
 import { AgentProvider } from "./agent-provider.ts";
 import { SamProvider, validateTrackingClip } from "./sam-provider.ts";
 import { ImageProvider } from "./image-provider.ts";
+import {ConditionProvider} from "./condition-provider";
+import type {conditionInput} from "../shared/camera-tools";
+import type {z} from "zod";
 import type { LookPreviewInput } from "../shared/look-preview.ts";
 import type { ObjectMotion, TrackInput } from "../shared/object-motion.ts";
 import type {
@@ -37,6 +41,8 @@ export type Session = {
   epoch: number;
   key?: Key;
   controller?: AbortController;
+  imageController?: AbortController;
+  requestId?: string;
   keyController?: AbortController;
   calls: number;
   tokens: number;
@@ -78,6 +84,7 @@ export class Engine {
     private voiceOptions: VoiceOptions = {},
     private sam = new SamProvider(),
     private images = new ImageProvider(),
+    private conditions = new ConditionProvider(),
   ) {}
   session(token?: string): { session: Session; token?: string } {
     const valid = token && /^[a-f0-9]{64}$/.test(token);
@@ -136,7 +143,7 @@ export class Engine {
       },
       calls: s.calls,
       limit: MAX_SESSION_CALLS,
-      busy: s.busy,
+      busy: s.busy||!!s.imageController,
       provider: "Meta Model API",
       capabilities: {
         image: "documented-not-live-tested",
@@ -156,7 +163,9 @@ export class Engine {
     delete s.motion;
     s.voice?.close();
     delete s.voice;
+    if(s.controller||s.imageController)traceServer(s,{stage:"session",reason:"canceled",calls:s.calls});
     s.controller?.abort();
+    s.imageController?.abort();
     s.keyController?.abort();
     s.epoch++;
   }
@@ -201,6 +210,15 @@ export class Engine {
     } finally {
       delete s.keyController;
     }
+  }
+  resetCallSession(s: Session) {
+    this.disconnect(s);
+    s.busy=false;delete s.controller;delete s.imageController;delete s.requestId;
+    s.calls=0;s.tokens=0;s.seen.clear();s.agentHistory=[];
+    delete s.agentSource;delete s.visual;delete s.motion;
+    s.phase="ready";
+    traceServer(s,{stage:"session",operation:"session/reset",calls:s.calls});
+    return this.view(s);
   }
   disconnect(s: Session) {
     this.cancel(s);
@@ -319,7 +337,7 @@ export class Engine {
     s: Session,
     epoch: number,
     requestId: string,
-    lane: "converse" | "observe" | "transcribe" | "track" | "image",
+    lane: "converse" | "observe" | "transcribe" | "track" | "image" | "condition",
     work: (key: string, signal: AbortSignal) => Promise<T>,
   ) {
     this.expireKey(s);
@@ -335,7 +353,8 @@ export class Engine {
         "KEY_REQUIRED",
         "Connect Muse Spark to talk with Glint.",
       );
-    if (s.busy)
+    const imageLane=lane==="image";
+    if (s.busy || (imageLane&&s.imageController) || (s.imageController&&!imageLane&&lane!=="converse"&&lane!=="transcribe"))
       throw new Problem(
         409,
         "BUSY",
@@ -350,13 +369,14 @@ export class Engine {
         "The 100-call session allowance is used. No more work was sent.",
       );
     const controller = new AbortController();
-    s.controller = controller;
-    s.busy = true;
+    if(imageLane)s.imageController=controller;
+    else {s.controller=controller;s.requestId=requestId;s.busy=true;}
     s.seen.add(requestId);
     s.calls++;
     s.lastSeen = this.now();
     s.key.idleUntil = Math.min(this.now() + HOUR / 4, s.key.absoluteUntil);
     const start = this.now();
+    traceServer(s,{stage:"provider-start",operation:lane,requestId,calls:s.calls});
     try {
       const result = await work(
         s.key.raw,
@@ -372,13 +392,17 @@ export class Engine {
       console.info(
         `[glint-timing] ${JSON.stringify({ scope: "server", lane, ms: this.now() - start })}`,
       );
+      traceServer(s,{stage:"provider-end",operation:lane,requestId,calls:s.calls,durationMs:this.now()-start});
       return result;
+    } catch(error){
+      traceServer(s,{stage:"provider-error",operation:lane,requestId,calls:s.calls,status:error instanceof Problem?error.status:502,durationMs:this.now()-start,reason:controller.signal.aborted||s.epoch!==epoch?"canceled":error instanceof Problem&&error.code==="IMAGE_RESPONSE"?"invalid":"provider"});throw error;
     } finally {
-      if (s.controller === controller) {
-        s.busy = false;
-        delete s.controller;
-      }
+      if(imageLane){if(s.imageController===controller)delete s.imageController;}
+      else if(s.controller===controller){s.busy=false;delete s.controller;delete s.requestId;}
     }
+  }
+  cancelConversationRequest(s:Session,requestId:string){
+    if(s.requestId===requestId)s.controller?.abort();
   }
   async converse(
     s: Session,
@@ -455,8 +479,10 @@ export class Engine {
               }
             : undefined,
           input.frames,
+          input.cameraTools,
         ),
     );
+    traceServer(s,{stage:"route",operation:"converse",requestId:input.requestId,action:result.action?.name??"answer",count:input.question.length});
     // A fresh-at-dispatch snapshot remains answerable; never label it live activity.
     if (input.url)
       s.agentSource = {
@@ -579,6 +605,12 @@ export class Engine {
     s.tokens+=result.tokens;
     // Photo bytes and generated images never enter agent history or SQLite.
     return {image:result.image,epoch:s.epoch};
+  }
+  async checkCondition(s:Session,input:z.infer<typeof conditionInput>){
+    if(this.now()-input.capturedAt>5000||input.capturedAt>this.now()+1000)throw new Problem(409,"STALE","Capture a fresh camera frame for this check.");
+    if(!s.key?.models.includes(input.model))throw new Problem(401,"MODEL_REQUIRED","Connect an available Muse Spark model.");
+    const result=await this.agentCall(s,input.epoch,input.requestId,"condition",(key,signal)=>this.conditions.check(key,input.model,input.condition,input.photo,signal));
+    return {...result,epoch:s.epoch,capturedAt:input.capturedAt};
   }
   async transcribe(
     s: Session,
@@ -751,7 +783,7 @@ export class Engine {
         "PAUSED",
         "Start the session before checking a view.",
       );
-    if (s.busy)
+    if (s.busy||s.imageController)
       throw new Problem(
         409,
         "BUSY",

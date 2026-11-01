@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {cameraCapabilities,type CameraAction} from "./camera-tools";
 
 export const publicLink = z
   .string()
@@ -59,6 +60,7 @@ export const agentInput = z
     events: z.array(visualEvent).max(4).optional(),
     voice: z.enum(["neural", "off"]).optional(),
     lookPreview: z.object({request:z.string().max(1500),stage:z.enum(["offered","photo-controls"])}).optional(),
+    cameraTools:cameraCapabilities.optional(),
   })
   .refine(
     (input) => !(input.image && input.frames?.length),
@@ -72,4 +74,5 @@ export type AgentReply = {
   searched: boolean;
   epoch: number;
   snapshot?: { capturedAt: number };
+  action?:CameraAction;
 };

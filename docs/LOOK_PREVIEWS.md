@@ -1,29 +1,45 @@
 # Optional photo look previews
 
-A request such as "Which Halloween look suits me?" offers a preview. This is a
-local, conservative intent match, not a general tool-calling agent. "Yes" opens
-the photo controls; follow-up style choices (for example fantasy then fairy)
-update the same preview description without discarding a selected photo. Requests
-such as "create an image" or "can I choose a photo?" open the photo controls. A
-bare "No" asks for clarification; explicit cancellation closes the flow. "No, just
-ideas" sends a normal text-only request. Spark also receives current look context
-and is told that Glint supports image previews, without receiving photo bytes. During
-camera/voice use, a main-screen link opens the card without reopening chat by itself.
+## Camera flow (default)
 
-The primary input is a still captured from Glint's existing live camera stream.
-The preview shows that same stream, and Capture camera view freezes a frame for
-review. Retake replaces it; neither action dispatches Muse Image. The native
-phone-camera file picker is not used. File upload (JPEG, PNG, WebP up to 10 MB)
-remains an optional fallback. After review, the user presses Generate preview. Browser processing reduces it
-to a JPEG no larger than 1024 px on its longest side and under 600 KB. It removes
-metadata; camera capture is explicit. HEIC is not supported.
+The conversational model selects a validated `edit_camera_image` tool for an
+explicit image request, such as “Show fairy makeup on me.” With the camera open,
+Glint captures a fresh frame and generates without separate capture or submit
+clicks. Progress and cancellation stay on the camera screen; the generated image
+opens in a labeled dialog over it, with Download and a close button.
+Voice requests follow the same path without opening Conversation.
+
+If the camera is off, Open camera for this task is required before capture.
+Follow-up requests can edit the last generated image, including after the camera
+is turned off. Closing the result keeps that image in transient memory for
+follow-ups; End session clears it. Canceling or switching cameras during a
+camera-based generation prevents the old result from appearing. Provider failure
+shows an error and does not automatically retry.
+
+A request to explain a visible issue uses `annotate_camera_frame` on the actual
+recent evidence frame, with numbered marks, rather than generating a replacement
+that could invent the issue. Download source frame saves the unmarked original.
+
+## Manual fallback
+
+When camera tools are disabled (`glint-camera-tools` set to `0` in localStorage),
+the older Conversation photo controls remain available. Capture camera view
+freezes the current stream for review; Retake replaces it; Generate preview
+starts the paid request. JPEG, PNG and WebP uploads up to 10 MB are an optional
+fallback. HEIC is unsupported.
+
+Both paths re-encode input to JPEG, no larger than 1024 px on its longest side
+and under 600 KB, removing metadata before dispatch.
 
 `POST /api/look-preview` requires the existing session cookie, matching origin,
 CSRF token, explicit consent, current epoch, unique request ID and connected key.
-It shares the 100-call session allowance and single paid-work lane. Each attempt
+It shares the 100-call session allowance. One image may run alongside one serialized
+conversation/transcription request; a second image and other camera work are blocked. Each attempt
 counts as one dispatch, including provider rejection; there are no automatic retries.
-The image lane has a bounded 120-second timeout. Cancel, session end and competing
-work invalidate the pending result.
+The image lane has a bounded 120-second timeout. Cancel and session end invalidate
+the pending result. Canceling an ordinary follow-up does not cancel the image.
+Image tool arguments stay internal and are never used as the spoken acknowledgment.
+Dispatch skips neural speech initialization; provider rendering time remains external.
 
 The server calls `muse-image-1.0` through `https://api.meta.ai/v1/responses`, with
 `store:false` and image/web search and shell tools disabled. Only supported,
@@ -37,8 +53,8 @@ to Glint SQLite, logs, localStorage or text-model conversation history. Photos a
 sent to Meta when generation is requested; `store:false` is an API setting, not a
 claim about all provider retention policies. Follow-up edits re-encode and reattach
 the last displayed preview rather than creating a stored provider conversation.
-A generated preview is labeled and can be downloaded. Close clears the card;
-End session also cancels work and clears it.
+A generated preview is labeled and can be downloaded. In the manual fallback,
+Close clears the card. End session cancels work and clears image state in both paths.
 
 Provider access, rate limits and output quality require a real account test.
 Automated tests use fake images and mocked provider responses; no paid generation

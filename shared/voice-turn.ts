@@ -4,7 +4,7 @@ export const NOISE_FLOOR_WINDOW_MS = 5000;
 export const NOISE_FLOOR_LAG_MS = 300;
 export const DEFAULT_END_SILENCE_MS = 1100;
 /** Patient end window even when ASR inserts terminal punctuation. */
-export const COMPLETE_END_SILENCE_MS = 800;
+export const COMPLETE_END_SILENCE_MS = 1200;
 const COMPLETE_MIN_LENGTH = 12;
 /**
  * True when a trailing partial reads mid-thought, so endpointing should wait
@@ -17,7 +17,7 @@ export function isTurnContinuation(text: string): boolean {
   if (!trailing) return false;
   if (/([,;:…]|\.\.\.|[-–—])\s*$/.test(trailing)) return true;
   return /\b(and|but|or|nor|yet|for|so|because|if|whether|while|although|though|unless|until|since|whereas|that|which|who|whom|whose|when|where|to|of|in|on|at|with|from|by|about|as|into|onto|through|during|after|before|between|against|among|without|within|upon|toward|towards|beside|beyond|around|a|an|the|some|any|my|your|his|her|our|their|this|these|those|each|every|another|such|is|are|was|were|be|been|being|am|do|does|did|have|has|had|will|would|can|could|should|shall|may|might|must|than|like|you know|for example|such as|kind of|sort of|plus|minus|times|versus|vs|um+|uh+|erm+|hmm+)\s*$/i.test(
-    trailing,
+    trailing.replace(/[.!?]+$/,""),
   );
 }
 /**

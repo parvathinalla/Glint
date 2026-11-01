@@ -10,6 +10,8 @@ export const test = base.extend<{ keyGateDismissed: void }>({
     async ({ page }, use) => {
       await page.addInitScript(() => {
         localStorage.setItem("glint-key-gate", "1");
+        // Legacy-flow regression specs; coordinator specs explicitly enable the production path.
+        localStorage.setItem("glint-camera-tools", "0");
         sessionStorage.setItem("glint-started", "1");
       });
       await use();

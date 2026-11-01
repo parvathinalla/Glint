@@ -108,7 +108,7 @@ export class SpeechQueue {
     if (this.buffer.trim()) this.enqueue(this.buffer);
     this.buffer = "";
     this.active = false;
-    this.paused = this.queue.length > 0;
+    this.paused = true;
     window.speechSynthesis?.cancel();
   }
   /** Resume a softStop() when the interruption proved to be echo. */
@@ -118,7 +118,7 @@ export class SpeechQueue {
     this.pump();
   }
   private pump() {
-    if (this.active || !this.queue.length || !("speechSynthesis" in window))
+    if (this.paused || this.active || !this.queue.length || !("speechSynthesis" in window))
       return;
     const text = this.queue.shift()!;
     if (!text) {

@@ -364,3 +364,11 @@ now share one FIFO synth lane, so every sentence synths at solo speed.
 The same run showed the lexicon silently skipping what's/what'd and any
 curly-quote token; the speak cleaner now folds those to ASCII and
 expands the seven proven-missing contractions.
+
+### Current app-controlled turn completion (November 2026)
+
+The earlier ENDPOINTING recommendation above predates Glint's patient local
+speech detector. The app's VoiceStream now explicitly selects PUSH_TO_TALK so
+that automatic local endStream controls each turn. This avoids two competing
+endpoint detectors and the duplicate full-WAV fallback seen in live traces.
+The generic RealtimeSession adapter still supports all documented modes.

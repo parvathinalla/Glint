@@ -1,3 +1,4 @@
+import {tracedFetch,traceClient} from "./diagnostics";
 import { readEvents } from "../shared/events.ts";
 import type { AgentReply } from "../shared/agent.ts";
 import { z } from "zod";
@@ -23,7 +24,7 @@ export async function streamAgent(
   onVoiceDone?: () => void,
   onDone?: () => void,
 ): Promise<AgentReply> {
-  const response = await fetch("/api/agent/stream", {
+  const response = await tracedFetch("agent/stream","/api/agent/stream", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", "x-glint-csrf": csrf },
@@ -34,8 +35,9 @@ export async function streamAgent(
     const error = await response.json().catch(() => ({}));
     throw Error(error.message || "Glint couldn’t open the response stream.");
   }
-  if (!response.headers.get("content-type")?.includes("text/event-stream"))
-    return (await response.json()) as AgentReply;
+  if (!response.headers.get("content-type")?.includes("text/event-stream")){
+    const reply=(await response.json()) as AgentReply;traceClient({stage:"stream-end",operation:"agent/stream"});return reply;
+  }
   let result: AgentReply | undefined;
   let first = true;
   await readEvents(response, (raw) => {
@@ -53,6 +55,7 @@ export async function streamAgent(
       .parse(raw);
     if (event.type === "delta" && event.text) {
       if (first) {
+        traceClient({stage:"stream-first-text",operation:"agent/stream"});
         first = false;
         onFirstText?.();
       }
@@ -82,10 +85,13 @@ export async function streamAgent(
     }
     if (event.type === "error")
       throw Error(event.message || "Glint’s response was interrupted.");
-  });
-  if (!result)
+  }).catch(error=>{traceClient({stage:"stream-error",operation:"agent/stream",reason:signal.aborted?"canceled":"invalid"});throw error;});
+  if (!result){
+    traceClient({stage:"stream-error",operation:"agent/stream",reason:"network"});
     throw Error(
       "The connection ended before Glint finished. You can retry your message.",
     );
+  }
+  traceClient({stage:"stream-end",operation:"agent/stream"});
   return result;
 }

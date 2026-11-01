@@ -135,3 +135,73 @@ The first browser run had one ambiguous confirmation-button selector; it was sco
 - Browser TTS is optional experimental output. Its actual audio/voice availability was not audibly tested.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for current boundaries and [../TODO.md](../TODO.md) for release gates. The seven-day local progress option, forty-call allowance, and five-second image expiry are implemented policies; they do not prove production retention, provider-account hard spending limits, or achievement of task accuracy targets.
+
+## November 2026: endpoint ownership and CSP probes
+
+- Build, TypeScript checks and lint passed.
+- All 342 unit/integration tests passed across 39 files.
+- The full 64-scenario browser run initially passed 58 scenarios. Six camera/
+  speech timing cases passed on a serial rerun after explicit camera-readiness
+  waits were extended to 12 seconds and the initial spoken-reply wait to 10 seconds.
+- The production-CSP regression serves the actual built assets with production
+  headers, loads the real neural VAD model/WASM, and records zero policy
+  violations. It confirms unsafe JavaScript evaluation remains prohibited.
+- VoiceStream's fake-socket regression checks the PUSH_TO_TALK handshake,
+  interim text without a charge, endStream, and exactly one completed-turn charge.
+- Quiet-speech inference, interrupted/empty turns, camera cancellation, image
+  generation, task progress, diagnostics and session reset were covered.
+- These tests use synthetic media and mocked provider responses. No real key or
+  paid inference was used; post-activation provider timing and recognition
+  accuracy still need a real conversation.
+
+## November 2026: conversation during image generation
+
+- The complete 66-scenario browser regression passed in one run (4.5 minutes),
+  including production CSP, neural VAD, speech interruption and mobile layout.
+
+- All 346 unit/integration tests passed across 39 files; lint, TypeScript and
+  production build passed.
+- Added coverage for separate image/conversation controllers, shared call limits,
+  rejecting a second image, and aborting a follow-up without canceling the image.
+- An unresolved neural-voice startup no longer delays a tool response. Image
+  acknowledgments exclude internal prompts, including the client fallback path.
+- Synthetic browser tests verify spoken status and cancel requests during a gated
+  image render, ordinary questions answered before rendering finishes, no duplicate
+  image dispatch, and late canceled results discarded. Progress no longer blocks
+  the camera/conversation controls.
+- No paid provider calls or real microphone recordings were used for these checks.
+  Real conversation recognition and image rendering latency remain live-test limits.
+
+## November 2026: overlapping device and neural speech
+
+- Live content-free diagnostics showed device playback followed by neural audio
+  for the same reply on turns 1, 2 and 4. Text deltas were arriving before the
+  stream selected its voice, triggering the device queue prematurely.
+- Device text now buffers until voice selection. Neural selection discards that
+  buffer and cancels device speech; unavailable neural voice flushes it to device
+  speech. Streams without a voice announcement retain the completion fallback.
+- All 14 focused voice/image-follow-up browser tests passed, including text before
+  neural selection with zero device utterances, device fallback, barge-in and
+  questions/cancel during image generation. Build, TypeScript and lint passed.
+- The same live URL was verified to serve the new frontend bundle. No backend
+  restart, key reset, paid inference or real audio capture was needed for testing.
+
+## November 2026: browser conversation review
+
+- Read the user's open Glint conversation through the in-app browser. Observed
+  isolated/garbled transcripts selecting annotations and duplicate annotation
+  summaries. The raw audio was not available, so intended wording was not inferred.
+- Reproduced two late-playback failures before the fix: neural audio and device
+  text could start after soft-stop when its queue was empty. Both speech queues
+  now stay paused until an explicit resume or cancel, including late fallback.
+- Isolated single-word requests no longer offer camera tools. Model instructions
+  require clarification for garbled fragments. This prevents guessing an action;
+  it does not repair speech-recognition accuracy.
+- Annotation results retain the existing assistant summary and evidence dialog
+  without appending or speaking a second result announcement.
+- All 350 unit/integration tests passed; TypeScript, build and lint passed.
+- All 25 focused browser scenarios passed in one run (2.8 minutes), covering
+  camera coordination, annotation summaries, image follow-ups and voice playback.
+- The new managed instance passed local/public health checks and serves the exact
+  built frontend. Windows retained the old port during restart, so deployment
+  used a fresh port/tunnel; the previous browser conversation was not reloaded.

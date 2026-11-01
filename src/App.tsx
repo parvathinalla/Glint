@@ -1,3 +1,4 @@
+import {tracedFetch} from "./diagnostics";
 import {
   useCallback,
   useEffect,
@@ -112,7 +113,7 @@ export default function App() {
       method = "POST",
       signal?: AbortSignal,
     ) => {
-      const response = await fetch(`/api/${path}`, {
+      const response = await tracedFetch(path,`/api/${path}`, {
         method,
         credentials: "same-origin",
         headers: {

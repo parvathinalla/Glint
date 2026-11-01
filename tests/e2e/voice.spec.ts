@@ -240,7 +240,7 @@ test("opening the camera unlocks playback before requesting camera permission", 
   await expect.poll(() => page.evaluate(() => (window as unknown as { cameraSawUnlock: boolean }).cameraSawUnlock)).toBe(true);
 });
 
-test("neural voice speaks streamed sentences without device speech", async ({
+test("neural voice speaks streamed sentences without device speech even when text precedes voice selection", async ({
   page,
   context,
 }) => {
@@ -261,9 +261,9 @@ test("neural voice speaks streamed sentences without device speech", async ({
     await route.fulfill({
       contentType: "text/event-stream",
       body: sse(
-        { type: "voice", mode: "neural", sampleRate: 24000, voice: "mock" },
         { type: "delta", text: "Your face looks " },
         { type: "delta", text: "round to oval. " },
+        { type: "voice", mode: "neural", sampleRate: 24000, voice: "mock" },
         {
           type: "audio",
           seq: 0,

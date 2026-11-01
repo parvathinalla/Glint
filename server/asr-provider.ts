@@ -378,7 +378,9 @@ export class VoiceStream {
         },
         onClosed: (info) => this.onProviderClosed(info),
       },
-      { socket: this.options.socket },
+      // One app-controlled turn: the local detector sends endStream after
+      // speech and its hesitation window. Provider endpointing must not race it.
+      { socket: this.options.socket, mode: "PUSH_TO_TALK" },
     );
     this.session = session;
     session.connect();
