@@ -130,9 +130,7 @@ export function CompanionHome({
   const [conversationOpen, setConversationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ended, setEnded] = useState(false);
-  const [started, setStarted] = useState(() => {
-    try { return sessionStorage.getItem("glint-started") === "1"; } catch { return false; }
-  });
+  const [started, setStarted] = useState(false);
   const [appearance, setAppearance] = useState<Appearance>(loadAppearance);
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const conversationDialog = useRef<HTMLDialogElement>(null);
@@ -1169,7 +1167,7 @@ export function CompanionHome({
                 <h1>{camera.active ? !conversationOpen && latestAnswer ? latestAnswer.slice(0, 180) + (latestAnswer.length > 180 ? "…" : "") : "Show me what you’re working on." : "What can I help you with?"}</h1>
                 <p className="glint-supporting">{camera.active ? visionPaused ? "Camera analysis paused. Reopen your camera to resume." : observing ? "Checking your recent camera view…" : awareness?.activity ? awareness.activity.slice(0, 120) : "Ask a question about what you see." : mic.enabled ? "Go ahead. I’m listening." : "Talk, type, or show me through your camera."}</p>
               </> : <><p className="glint-eyebrow">A LITTLE SPARK. A CLEARER NEXT STEP.</p><h1>Show me. Tell me.<br/>Let’s do it.</h1><p className="glint-supporting">A camera-and-voice companion for the things in front of you.</p>
-                <button className="glint-primary" onClick={() => { setStarted(true); try { sessionStorage.setItem("glint-started", "1"); } catch { /* optional */ } }}>Start Glint <ArrowUp className="glint-next" size={19}/></button>
+                <button className="glint-primary" onClick={() => setStarted(true)}>Start Glint <ArrowUp className="glint-next" size={19}/></button>
                 <small className="glint-privacy">Your camera and mic start only when you choose.</small>
               </>}
               {partial && <p className="glint-live-transcript" aria-live="polite">{partial}</p>}
@@ -1181,7 +1179,7 @@ export function CompanionHome({
           </div>
           {started && !fullscreen && <div className="glint-session-dock">{controls}</div>}
         </div>
-        <footer className="glint-attribution"><Sparkles size={13}/> Built with Meta models <span>See · Understand · Guide</span></footer>
+        <footer className="glint-attribution"><svg className="meta-mark" width="22" height="14" viewBox="0 0 32 20" aria-hidden="true"><path d="M16 10C12 3 10 2 7 2C3 2 1 8 1 13C1 17 3 18 5 18C9 18 12 12 16 6C19 2 21 2 24 2C28 2 31 8 31 13C31 17 29 18 27 18C23 18 20 13 16 7C13 3 10 2 7 2" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg> Built with Meta models <span>See · Understand · Guide</span></footer>
       </>}
       </div>
       <dialog ref={conversationDialog} className="glint-sheet glint-conversation" aria-label="Conversation" onCancel={() => setConversationOpen(false)}>

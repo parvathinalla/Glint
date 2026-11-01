@@ -2,7 +2,7 @@ import { useId } from "react";
 import { SilverStar } from "./SilverStar";
 export function Spark({state="ready",small=false}:{state?:string;small?:boolean}) {
   if(small) return <SparkVector state={state} small/>;
-  return <SilverStar state={state}><SparkVector state={state}/></SilverStar>;
+  return <SilverStar state={state}/>;
 }
 function SparkVector({state="ready",small=false}:{state?:string;small?:boolean}) {
   const id="spark-"+useId().replace(/[^a-zA-Z0-9_-]/g,"");
@@ -10,7 +10,7 @@ function SparkVector({state="ready",small=false}:{state?:string;small?:boolean})
   return <svg className={`spark ${small?"spark-small":""} spark-${state}`} viewBox="0 0 160 180" role="img" aria-label={`Glint AI companion, ${state}`}>
     <defs>
       <radialGradient id={id+"-base"} cx="35%" cy="23%" r="82%">
-        <stop stopColor="#dceaf0"/><stop offset=".27" stopColor="#b3cbd7"/><stop offset=".58" stopColor="#829eaf"/><stop offset=".83" stopColor="#57788e"/><stop offset="1" stopColor="#314e65"/>
+        <stop stopColor="#dceaf0"/><stop offset=".27" stopColor="#b3cbd7"/><stop offset=".58" stopColor="#93cadc"/><stop offset=".83" stopColor="#6babc7"/><stop offset="1" stopColor="#578fad"/>
       </radialGradient>
       <radialGradient id={id+"-belly"} cx="68%" cy="67%" r="64%">
         <stop stopColor="#2b4558" stopOpacity=".72"/><stop offset=".56" stopColor="#66879e" stopOpacity=".25"/><stop offset="1" stopColor="#b4d9e9" stopOpacity="0"/>
@@ -45,7 +45,12 @@ function SparkVector({state="ready",small=false}:{state?:string;small?:boolean})
       </g>
       <path d="M76 20C69 24 65 44 56 51C45 60 24 63 18 70" fill="none" stroke="#edf2ff" strokeWidth="2.5" strokeLinecap="round" opacity=".65" filter={`url(#${id}-gloss)`}/>
       <ellipse cx="64" cy="59" rx="17" ry="9" transform="rotate(-40 64 59)" fill="#c6d4ee" opacity=".2" filter={`url(#${id}-soft)`}/>
-      <g fill="#fff" filter={`url(#${id}-eyes)`}><ellipse cx="67" cy="83" rx="3.7" ry="8"/><ellipse cx="88" cy="83" rx="3.7" ry="8"/></g>
+      <g className="glint-friendly-face">
+        <ellipse cx="56" cy="94" rx="8" ry="4" fill="#eda9b6" opacity=".55"/>
+        <ellipse cx="101" cy="94" rx="8" ry="4" fill="#eda9b6" opacity=".55"/>
+        <g className="glint-friendly-eyes" fill="#294454"><ellipse cx="65" cy="82" rx="4.5" ry="6"/><ellipse cx="92" cy="82" rx="4.5" ry="6"/><circle cx="64" cy="80" r="1.5" fill="#fff"/><circle cx="91" cy="80" r="1.5" fill="#fff"/></g>
+        <path d="M71 96 Q79 104 87 96" fill="none" stroke="#3d5b6c" strokeWidth="2.5" strokeLinecap="round"/>
+      </g>
     </g>
   </svg>;
 }
