@@ -13,6 +13,7 @@ import { trackInput } from "../shared/object-motion.ts";
 import { voiceDiagnosticBatch } from "../shared/voice-diagnostics.ts";
 import { lookPreviewInput } from "../shared/look-preview.ts";
 import {conditionInput} from "../shared/camera-tools";
+import {LiveKitSessions,livekitConfig,livekitJoin} from "./livekit";
 
 export const cookieToken = (header = "") =>
   header
@@ -195,7 +196,7 @@ export function handleVoiceSocket(
     engine.voiceClose(session);
   });
 }
-export function createApp(engine: Engine, origin: string, production = false) {
+export function createApp(engine: Engine, origin: string, production = false, livekit = new LiveKitSessions()) {
   const app = express();
   app.disable("x-powered-by");
   app.use((req, res, next) => {
@@ -231,7 +232,7 @@ export function createApp(engine: Engine, origin: string, production = false) {
               imgSrc: ["'self'", "blob:", "data:"],
               mediaSrc: ["'self'", "blob:"],
               workerSrc: ["'self'"],
-              connectSrc: ["'self'"],
+              connectSrc: ["'self'",...(livekitConfig()?["https://*.livekit.cloud","wss://*.livekit.cloud"]:[])],
               objectSrc: ["'none'"],
               frameAncestors: ["'none'"],
             },
@@ -318,6 +319,12 @@ export function createApp(engine: Engine, origin: string, production = false) {
     next();
   });
   const s = (res: express.Response) => res.locals.session as Session;
+  app.get("/api/livekit/config",(_req,res)=>res.json({enabled:livekit.available}));
+  app.post("/api/livekit/token",async(req,res)=>{
+    const input=livekitJoin.parse(req.body);
+    res.json(await livekit.join(s(res),input.accessCode));
+  });
+  app.delete("/api/livekit/session",async(_req,res)=>{await livekit.end(s(res));res.json({ended:true});});
   const diagnosticRates = new WeakMap<Session, { started: number; count: number }>();
   app.post("/api/voice-diagnostics", (req, res) => {
     const batch = voiceDiagnosticBatch.parse(req.body);

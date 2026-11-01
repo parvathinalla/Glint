@@ -12,6 +12,9 @@ import { Engine } from "./engine.ts";
 import { Store } from "./store.ts";
 import { MetaProvider } from "./provider.ts";
 import { getServerVoice } from "./tts-kokoro.ts";
+import dotenv from "dotenv";
+
+dotenv.config({path:[".env.local",".env"],quiet:true});
 
 const production = process.argv.includes("--production");
 const port = Number(process.env.PORT ?? 3100);

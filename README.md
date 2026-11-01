@@ -79,6 +79,11 @@ for the test matrix, playback evidence limits and content-free scoring command.
 
 ## Conversation and task continuity
 
+An opt-in LiveKit voice comparison is available at `/livekit`. It uses a separate
+agent process and is disabled until configured. See
+[LiveKit prototype setup](docs/LIVEKIT_PROTOTYPE.md) for secrets, provider billing
+boundaries, run commands and live-test limitations.
+
 Image progress and cancel requests are handled from local task state. The microphone
 stays active during image generation; other spoken or typed questions are processed
 serially alongside the image, with up to four pending follow-ups and explicit feedback

@@ -4,4 +4,8 @@ import App from "./App.tsx";
 import "./styles.css";
 import "./theme.css";
 import "./companion-ui.css";
-createRoot(document.getElementById("root")!).render(<App />);
+import {lazy,Suspense} from "react";
+const LiveKitPrototype=lazy(()=>import("./LiveKitPrototype"));
+createRoot(document.getElementById("root")!).render(window.location.pathname==="/livekit"
+  ? <Suspense fallback={<p>Loading voice prototype…</p>}><LiveKitPrototype/></Suspense>
+  : <App />);
