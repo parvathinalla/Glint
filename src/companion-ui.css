@@ -100,3 +100,12 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
 .glint-star-scene>.jelly-star { width:250px; height:260px; animation:none; filter:drop-shadow(0 12px 15px #263b5418); }
 .glint-star-orbit, .glint-star-scene>.glint-sparkle { display:none; }
 @media(max-width:600px) { .glint-star-scene>.jelly-star { width:230px; height:240px; } }
+.glint-look-photos { display:flex; flex-wrap:wrap; gap:12px; }
+.glint-look-photos figure { flex:1; min-width:120px; margin:8px 0; }
+.glint-look-photos img { display:block; width:100%; max-height:300px; object-fit:contain; border-radius:12px; background:var(--ui-surface); }
+.glint-look-photos figcaption { font-size:11px; color:var(--ui-muted); margin-top:6px; }
+.glint-look-card fieldset { padding:12px; margin:12px 0; border:1px solid var(--ui-line); border-radius:12px; min-width:0; }
+.glint-look-card input[type=file] { display:block; width:100%; max-width:260px; font-size:11px; }
+.glint-look-prompt { display:block; font-size:13px; margin-top:10px; }
+.glint-look-prompt textarea { display:block; width:100%; min-height:88px; resize:vertical; margin-top:6px; background:var(--ui-surface); color:var(--ui-text); border:1px solid var(--ui-line); border-radius:10px; padding:10px; }
+.glint-look-card label.glint-text { display:block; }

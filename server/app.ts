@@ -9,6 +9,7 @@ import { TtsStream } from "./tts-stream.ts";
 import { getServerVoice } from "./tts-kokoro.ts";
 import { trackInput } from "../shared/object-motion.ts";
 import { voiceDiagnosticBatch } from "../shared/voice-diagnostics.ts";
+import { lookPreviewInput } from "../shared/look-preview.ts";
 
 export const cookieToken = (header = "") =>
   header
@@ -325,6 +326,14 @@ export function createApp(engine: Engine, origin: string, production = false) {
       if(!res.writableEnded && session.epoch===input.epoch)engine.phase(session,"paused");
     });
     res.json(await engine.trackMotion(session,input));
+  });
+  app.post("/api/look-preview",async(req,res)=>{
+    const input=lookPreviewInput.parse(req.body),session=s(res);
+    validateCameraImage(input.photo);
+    res.on("close",()=>{
+      if(!res.writableEnded && session.seen.has(input.requestId) && session.epoch===input.epoch)engine.phase(session,"paused");
+    });
+    res.json(await engine.previewLook(session,input));
   });
   app.post("/api/observe", async (req, res) => {
     const input = observeInput.parse(req.body);

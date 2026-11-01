@@ -36,8 +36,10 @@ not consent to continuously track. The result stays in chat; the optional clip
 viewer returns there. Clips remain in bounded transient browser memory, not
 SQLite. Camera reset/session end clears the current playable clip.
 
-Muse Image and Halloween look previews are not exposed as working features.
-They remain design concepts for a future provider integration.
+Look requests offer an optional Muse Image preview inside Conversation. The user
+chooses a photo and presses Generate before any image request. Results, download,
+and follow-up editing stay in that card; closing it or ending the session clears
+the photo and result from component state. See `LOOK_PREVIEWS.md`.
 
 Browser tests use fake devices and mocked paid endpoints. They verify navigation,
 permissions boundaries, recorded MP4 dispatch, voice streaming/fallback,

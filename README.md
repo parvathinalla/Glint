@@ -30,7 +30,7 @@ The site opens directly to **Start Glint**, then a glossy blue-star companion ho
 6. Ask **“Which way did I move the mouse?”** or **“Track the mouse.”** A conservative local intent route supports common named objects; it is not a general-purpose tool agent. Without fresh movement evidence, Glint asks for another movement and shows a readiness card. Open the camera if needed, then explicitly choose **Ready — check movement**. A bounded two-second SAM clip is analyzed; results and an optional recorded-clip viewer appear in the same chat. Unclear objects prompt clarification. Unsupported MP4 capture fails before dispatch. Enabling analysis alone does not start recording. SAM video has a 50-frame billing minimum and separate entitlement. See [object tracking](docs/OBJECT_TRACKING.md).
 7. **End session** cancels work and stops camera/microphone. **Start again** returns to the companion with both off. It does not reset the server's 100-call session allowance.
 
-Muse Image/look previews remain a future design concept and are not exposed as working features.
+Look requests now offer an optional Muse Image photo preview inside Conversation. Choose or take a photo, describe the edit, then press Generate preview. Follow-up edits use the last preview. See [photo previews](docs/LOOK_PREVIEWS.md) for limits and testing.
 
 Provider adapters and voice/link flows have fixture tests, not live provider verification. No real credentials or paid API calls were used during implementation.
 

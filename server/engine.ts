@@ -12,6 +12,8 @@ import { VoiceStream, type AsrSocketFactory } from "./asr-provider.ts";
 import { Store } from "./store.ts";
 import { AgentProvider } from "./agent-provider.ts";
 import { SamProvider, validateTrackingClip } from "./sam-provider.ts";
+import { ImageProvider } from "./image-provider.ts";
+import type { LookPreviewInput } from "../shared/look-preview.ts";
 import type { ObjectMotion, TrackInput } from "../shared/object-motion.ts";
 import type {
   AgentInput,
@@ -75,6 +77,7 @@ export class Engine {
     private agent = new AgentProvider(),
     private voiceOptions: VoiceOptions = {},
     private sam = new SamProvider(),
+    private images = new ImageProvider(),
   ) {}
   session(token?: string): { session: Session; token?: string } {
     const valid = token && /^[a-f0-9]{64}$/.test(token);
@@ -316,7 +319,7 @@ export class Engine {
     s: Session,
     epoch: number,
     requestId: string,
-    lane: "converse" | "observe" | "transcribe" | "track",
+    lane: "converse" | "observe" | "transcribe" | "track" | "image",
     work: (key: string, signal: AbortSignal) => Promise<T>,
   ) {
     this.expireKey(s);
@@ -357,7 +360,7 @@ export class Engine {
     try {
       const result = await work(
         s.key.raw,
-        AbortSignal.any([controller.signal, AbortSignal.timeout(45000)]),
+        AbortSignal.any([controller.signal, AbortSignal.timeout(lane === "image" ? 120000 : 45000)]),
       );
       this.expireKey(s);
       if (controller.signal.aborted || s.epoch !== epoch)
@@ -569,6 +572,12 @@ export class Engine {
     const motion: ObjectMotion={...result,concept:input.concept,from:input.from,to:input.to,epoch:s.epoch};
     s.motion=motion;
     return motion;
+  }
+  async previewLook(s: Session,input: LookPreviewInput) {
+    const result=await this.agentCall(s,input.epoch,input.requestId,"image",(key,signal)=>this.images.edit(key,input.photo,input.prompt,signal));
+    s.tokens+=result.tokens;
+    // Photo bytes and generated images never enter agent history or SQLite.
+    return {image:result.image,epoch:s.epoch};
   }
   async transcribe(
     s: Session,

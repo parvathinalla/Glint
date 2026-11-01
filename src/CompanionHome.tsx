@@ -5,6 +5,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { LookPreview } from "./LookPreview";
+import { wantsLookPreview, type LookPreviewResult } from "../shared/look-preview";
 import {
   ArrowUp,
   Camera,
@@ -128,6 +130,9 @@ export function CompanionHome({
   const [trackingAllowed, setTrackingAllowed] = useState(true);
   const [lastTrackingClip, setLastTrackingClip] = useState<string | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
+  const [lookRequest,setLookRequest]=useState("");
+  const [lookAccepted,setLookAccepted]=useState(false);
+  const [lookVersion,setLookVersion]=useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ended, setEnded] = useState(false);
   const [started, setStarted] = useState(() => {
@@ -380,6 +385,23 @@ export function CompanionHome({
           return;
         }
       }
+      if(!instructionsUrl && lookRequest && /^(no|no thanks|not now|cancel)[.! ]*$/i.test(text.trim())){
+        setLookRequest("");setLookAccepted(false);setQuestion("");
+        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:"Photo preview dismissed. No photo was captured or sent."}].slice(-20) as Message[]);
+        return;
+      }
+      if(!instructionsUrl && lookRequest && /^(yes|yeah|yes please|show me|okay|ok)[.! ]*$/i.test(text.trim())){
+        setLookAccepted(true);setQuestion("");
+        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:"Choose or take a photo in the look preview, describe the style, then press Generate preview."}].slice(-20) as Message[]);
+        return;
+      }
+      if(!instructionsUrl && wantsLookPreview(text)){
+        setLookRequest(text);setLookAccepted(false);setLookVersion(version=>version+1);setQuestion("");
+        const offer="I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
+        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:offer}].slice(-20) as Message[]);
+        if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
+        return;
+      }
       const intent = !instructionsUrl ? trackingIntent(text) : null;
       if (!instructionsUrl && trackingPromptRef.current.requested && cancelsTracking(text)) {
         setQuestion(""); setTrackingRequested(false); setTrackConcept(""); setTrackProblem("");
@@ -599,6 +621,19 @@ export function CompanionHome({
   }
   const sendRef = useRef(send);
   sendRef.current = send;
+  async function generateLook(photo:string,prompt:string):Promise<LookPreviewResult>{
+    if(!current.current.key.connected){connect();throw Error("Connect your model key before generating a preview.");}
+    const pending=interrupt(false),expected=generation.current;
+    await pending;
+    if(expected!==generation.current)throw Error("Preview canceled.");
+    const controller=new AbortController(),token=generation.current;
+    request.current=controller;lock.current=true;setBusy(true);
+    try{
+      const result=await api("look-preview",{photo,prompt,consent:true,epoch:current.current.epoch,requestId:crypto.randomUUID()},"POST",controller.signal) as LookPreviewResult;
+      if(controller.signal.aborted||token!==generation.current||result.epoch!==current.current.epoch)throw Error("Preview canceled.");
+      return result;
+    }finally{if(request.current===controller){request.current=null;lock.current=false;setBusy(false);}}
+  }
   async function trackObject() {
     if(!current.current.key.connected){connect();return;}
     if(!trackingAllowedRef.current || !camera.active || tracking || trackingStart.current)return;
@@ -1087,6 +1122,7 @@ export function CompanionHome({
   const endSession = () => {
     camera.stop(); mic.cancel(); stopSpeech();
     setTrackingRequested(false); setLastTrackingClip(null); setObjectMotion(null);
+    setLookRequest("");setLookAccepted(false);
     setConversationOpen(false); setSettingsOpen(false); setFullscreen(false);
     setEnded(true);
     void interrupt(true, true);
@@ -1176,6 +1212,7 @@ export function CompanionHome({
               {subsOn && speaking && subtitle && !fullscreen && !conversationOpen && <p className="glint-live-transcript">{subtitle}</p>}
               {(busy || speaking) && <button className="glint-interrupt" onClick={() => void interrupt(false)}><Square size={13}/> Interrupt</button>}
               {mic.enabled && voiceNote && <button className="glint-text glint-audio-note" onClick={() => { speech.current?.unlock(); voicePlayer.current?.unlock(); }}>{voiceNote}</button>}
+              {lookRequest&&!conversationOpen&&<button className="glint-text" onClick={()=>setConversationOpen(true)}>Open your look preview</button>}
               {problem && !conversationOpen && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}<button className="glint-round" aria-label="Dismiss conversation message" onClick={() => setProblem("")}><X size={17}/></button></div>}
             </div>
           </div>
@@ -1208,6 +1245,7 @@ export function CompanionHome({
               <button className="glint-text" onClick={() => { setTrackingRequested(false); setTrackProblem(""); }}>Not now</button>
             </div>}
           </div>}
+          {lookRequest&&!ended&&<LookPreview key={lookVersion} request={lookRequest} accepted={lookAccepted} onAccept={()=>setLookAccepted(true)} onDismiss={()=>{setLookRequest("");setLookAccepted(false);}} onIdeas={()=>{const question=lookRequest;setLookRequest("");setLookAccepted(false);void send("Give me text-only ideas; do not generate images. "+question);}} generate={generateLook} cancel={()=>void interrupt(false)}/>}
           {busy && <p className="glint-wait"><LoaderCircle className="spin" size={17}/>{researching ? "Reading your instructions…" : "Thinking…"}</p>}
         </div>
         {problem && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}</div>}
@@ -1227,7 +1265,7 @@ export function CompanionHome({
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); connect(); }}><span>{view.key.connected ? "Model connected" : "Connect model"}<small>Manage your temporary API key</small></span><ChevronLeft className="glint-next" size={18}/></button>
           <p className="glint-setting-note">{view.calls} of {view.limit} session calls used. Camera checks also use this allowance.</p>
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); openLink(); }}><span>Add instructions link<small>Use a public product page or manual</small></span><Link size={18}/></button>
-          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Local Kokoro generates speech with device-voice fallback.</p></details>
+          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates photo previews only after you choose a photo and press Generate. Local Kokoro generates speech with device-voice fallback.</p></details>
           <details className="voice-diagnostics glint-advanced"><summary>Voice test diagnostics</summary><p>Optional event names and timings only. No audio, transcript, images, voiceprints or keys. Up to 120 events remain in this page; shared events appear in server logs.</p>
             <label className="glint-setting-row"><span>Record and share voice diagnostics</span><input type="checkbox" checked={diagnosticsOn} onChange={event => { if (event.target.checked) { diagnostics.current.start(); setDiagnosticEvents([]); } else diagnostics.current.stop(); setDiagnosticUpload(""); setDiagnosticsOn(event.target.checked); }}/></label>
             {diagnosticUpload && <p role="status">{diagnosticUpload}</p>}

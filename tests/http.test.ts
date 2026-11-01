@@ -400,6 +400,16 @@ describe("HTTP isolation and validation", () => {
       (await f.call("check", { ...body, image: "x".repeat(1100000) })).status,
     ).toBe(413);
   });
+  it("requires preview consent, session authorization and a bounded local JPEG",async()=>{
+    let calls=0;
+    const f=await fixture({models:async()=>["muse-spark-test"],infer:async()=>{calls++;throw Error("Unexpected dispatch");}});
+    const body={photo:"https://example.com/photo.jpg",prompt:"witch costume",consent:true,epoch:f.view.epoch,requestId:randomUUID()};
+    expect((await f.call("look-preview",{...body,consent:false})).status).toBe(400);
+    expect((await f.call("look-preview",body)).status).toBe(400);
+    expect((await f.call("look-preview",body,{csrf:"wrong"})).status).toBe(403);
+    expect((await f.call("look-preview",{...body,photo:"x".repeat(1100000)})).status).toBe(413);
+    expect(calls).toBe(0);
+  });
   it("sanitizes unhandled validation failures and never returns a key in session view", async () => {
     const f = await fixture({
       models: async () => {
