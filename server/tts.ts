@@ -18,7 +18,7 @@ export type GlintVoice = {
  */
 export function serializeVoice(
   voice: GlintVoice,
-  { timeoutMs = 4000, cooldownMs = 60000 } = {},
+  { timeoutMs = 8000, cooldownMs = 15000 } = {},
 ): GlintVoice {
   let tail: Promise<unknown> = Promise.resolve();
   let unavailableUntil = 0;
@@ -47,20 +47,26 @@ export function serializeVoice(
           controller.abort(signal?.reason);
           finish(signal?.reason ?? Error("Speech canceled."));
         };
-        const timer = setTimeout(() => {
-          unavailableUntil = Date.now() + cooldownMs;
+        const expire = () => {
+          // A queued caller has not exercised the engine: only an active
+          // generation failure should put every caller into cooldown.
+          if (generationStarted !== undefined)
+            unavailableUntil = Date.now() + cooldownMs;
           controller.abort(Error("Neural voice deadline exceeded."));
-          console.info(`[glint-voice] neural voice deadline exceeded; device fallback cooldownMs=${cooldownMs}`);
+          console.info(`[glint-voice] neural voice deadline exceeded; device fallback cooldownMs=${generationStarted === undefined ? 0 : cooldownMs}`);
           const now = performance.now();
           console.info(`[glint-timing] ${JSON.stringify({ scope: "server", lane: "tts-timeout", queueMs: Math.round((generationStarted ?? now) - queuedAt), generationMs: generationStarted === undefined ? 0 : Math.round(now - generationStarted) })}`);
           finish(controller.signal.reason);
-        }, timeoutMs);
+        };
+        let timer = setTimeout(expire, timeoutMs);
         signal?.addEventListener("abort", abort, { once: true });
         const run = async () => {
           controller.signal.throwIfAborted();
           if (Date.now() < unavailableUntil) throw Error("Neural voice cooling down.");
           const started = performance.now();
           generationStarted = started;
+          clearTimeout(timer);
+          timer = setTimeout(expire, timeoutMs);
           const audio = await voice.synth(text, controller.signal);
           controller.signal.throwIfAborted();
           finish(undefined, {

@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   VoiceTurnDetector,
+  COMPLETE_END_SILENCE_MS,
   isTurnComplete,
   isTurnContinuation,
   pcm16Bytes,
   voiceWav,
 } from "../shared/voice-turn.ts";
 describe("local hands-free turn boundaries", () => {
+  it("keeps a punctuated partial open across a natural 700ms pause", () => {
+    const detector = new VoiceTurnDetector(24000);
+    const speech = new Float32Array(2400).fill(0.1), quiet = new Float32Array(2400);
+    const opts = {endSilenceMs: COMPLETE_END_SILENCE_MS};
+    for (let i=0;i<4;i++) detector.push(speech,0.014,opts);
+    for (let i=0;i<7;i++) expect(detector.push(quiet,0.014,opts).ended).toBeUndefined();
+    expect(detector.push(speech,0.014,opts).ended).toBeUndefined();
+    let result = detector.push(quiet,0.014,opts);
+    for (let i=0;i<7;i++) result=detector.push(quiet,0.014,opts);
+    expect(result.audio).toBeDefined();
+  });
   it("does not submit silence and detects two turns without a button press", () => {
     const detector = new VoiceTurnDetector(24000);
     const quiet = new Float32Array(2400),
@@ -90,7 +102,7 @@ describe("streaming live frames", () => {
       quiet = new Float32Array(2400);
     for (let i = 0; i < 2; i++) detector.push(speech);
     let result = detector.push(quiet);
-    for (let i = 0; i < 8; i++) result = detector.push(quiet);
+    for (let i = 0; i < 10; i++) result = detector.push(quiet);
     expect(result.audio).toBeDefined();
     expect(result.ended).toBe(true);
     expect(result.live).toHaveLength(1);
@@ -185,7 +197,7 @@ describe("streaming live frames", () => {
       quiet = new Float32Array(1024);
     for (let i = 0; i < 4; i++) detector.push(speech);
     let result = detector.push(quiet);
-    for (let i = 0; i < 19; i++) result = detector.push(quiet);
+    for (let i = 0; i < 25; i++) result = detector.push(quiet);
     expect(result.audio).toBeUndefined();
     expect(result.ended).toBe(true);
     result = detector.push(speech);

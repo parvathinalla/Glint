@@ -5,6 +5,21 @@ import {
   type VoiceSample,
 } from "../server/tts.ts";
 
+it("gives queued sentences their full generation budget", async () => {
+  vi.useFakeTimers();
+  try {
+    const voice = serializeVoice({name:"cpu", sampleRate:24000, async synth() {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      return {samples:new Float32Array(1),sampleRate:24000};
+    }}, {timeoutMs:4000});
+    const first = voice.synth("first");
+    const second = voice.synth("second");
+    const results = Promise.all([first,second]);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(await results).toHaveLength(2);
+  } finally { vi.useRealTimers(); }
+});
+
 it("times out a stuck native job, bypasses it during cooldown, and never overlaps jobs", async () => {
   vi.useFakeTimers();
   try {

@@ -21,6 +21,7 @@ export function useMicrophone(
   vad?: {
     endSilenceMs?: number | (() => number);
     shouldExtend?: () => boolean;
+    onSpeechProgress?: (voicedMs: number) => void;
     onSpeechEnd?: (turnSent: boolean) => void;
     onMlStatus?: (ready: boolean, reason?: string) => void;
   },
@@ -134,6 +135,7 @@ export function useMicrophone(
           {
             endSilenceMs: live.vad?.endSilenceMs,
             shouldExtend: live.vad?.shouldExtend,
+            onSpeechProgress: live.vad?.onSpeechProgress,
             mlSpeech: ml?.push(event.data) ?? null,
           },
         );

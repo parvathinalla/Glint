@@ -2,9 +2,9 @@
 export const NOISE_FLOOR_MARGIN = 4;
 export const NOISE_FLOOR_WINDOW_MS = 5000;
 export const NOISE_FLOOR_LAG_MS = 300;
-export const DEFAULT_END_SILENCE_MS = 850;
-/** Short end window once the trailing partial reads finished. */
-export const COMPLETE_END_SILENCE_MS = 300;
+export const DEFAULT_END_SILENCE_MS = 1100;
+/** Patient end window even when ASR inserts terminal punctuation. */
+export const COMPLETE_END_SILENCE_MS = 800;
 const COMPLETE_MIN_LENGTH = 12;
 /**
  * True when a trailing partial reads mid-thought, so endpointing should wait
@@ -57,6 +57,7 @@ export class VoiceTurnDetector {
     opts: {
       endSilenceMs?: number | (() => number);
       shouldExtend?: () => boolean;
+      onSpeechProgress?: (voicedMs: number) => void;
       /**
        * Neural speech verdict for this frame. OR-fused: ML can only add
        * speech detections (quiet speech in noise), never veto energy.
@@ -128,6 +129,7 @@ export class VoiceTurnDetector {
         this.voiced += ms;
       }
     }
+    opts.onSpeechProgress?.(this.voiced);
     const endSilenceMs =
       typeof opts.endSilenceMs === "function"
         ? opts.endSilenceMs()

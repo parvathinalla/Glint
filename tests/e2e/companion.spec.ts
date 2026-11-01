@@ -253,6 +253,7 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
   await expect(
     page.getByRole("button", { name: "End voice chat", exact: true }),
   ).toBeVisible();
+  await openConversation(page);
   await page.waitForTimeout(600);
   expect(voiceRequests).toBe(0);
   await page.evaluate(() =>
@@ -286,6 +287,8 @@ test("hands-free voice turns and optional link flow (mock provider, synthetic mi
   await openInstructions(page);
   await page.getByLabel("Product or manual link").fill("https://www.ikea.com/");
   await page.getByRole("button", { name: "Let Glint read it" }).click();
+  await expect(page.getByRole("dialog", {name:"Add instructions link"})).not.toBeVisible();
+  await openConversation(page);
   await expect(
     page.getByRole("link", { name: "Example source fixture" }),
   ).toBeVisible();
@@ -377,6 +380,7 @@ test(`streaming voice ${losesAudio ? "uses the complete recording after an audio
   await expect(
     page.getByRole("button", { name: "End voice chat", exact: true }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(() =>
     (
       window as unknown as { voiceFixture: { say: () => void } }
@@ -464,6 +468,7 @@ test("voice can interrupt read-aloud and continue with a new automatic turn", as
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(() =>
     (
       window as unknown as { voiceFixture: { say: () => void } }
@@ -504,19 +509,20 @@ test("voice can interrupt read-aloud and continue with a new automatic turn", as
   ).toBeVisible();
 });
 
-test("a short noise burst pauses read-aloud and speech resumes after the drop", async ({
+test("a short noise burst leaves read-aloud uninterrupted", async ({
   page,
 }) => {
   await syntheticMicrophone(page);
   await page.addInitScript(() => {
     localStorage.setItem("glint-streaming-voice", "0");
-    const fixture = window as unknown as { spoken: string[]; canceled: number };
+    const fixture = window as unknown as { spoken: string[]; canceled: number; finish?: () => void };
     fixture.spoken = [];
     fixture.canceled = 0;
     Object.defineProperty(window, "speechSynthesis", {
       value: {
         speak: (utterance: SpeechSynthesisUtterance) => {
           if (utterance.text.trim()) fixture.spoken.push(utterance.text);
+          fixture.finish = () => utterance.onend?.(new Event("end") as SpeechSynthesisEvent);
         },
         cancel: () => {
           fixture.canceled++;
@@ -574,6 +580,7 @@ test("a short noise burst pauses read-aloud and speech resumes after the drop", 
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(
     () =>
       (window as unknown as { voiceFixture: { say: () => void } })
@@ -599,12 +606,10 @@ test("a short noise burst pauses read-aloud and speech resumes after the drop", 
         }
       ).voiceFixture.blip(180),
   );
-  // The burst interrupts (soft-stop) and the dropped turn resumes speech.
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { canceled: number }).canceled),
-    )
-    .toBeGreaterThan(canceledBefore);
+  // A brief burst must not stop playback or manufacture a second turn.
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as unknown as {canceled:number}).canceled)).toBe(canceledBefore);
+  await page.evaluate(() => (window as unknown as {finish?:()=>void}).finish?.());
   await expect
     .poll(() =>
       page.evaluate(
@@ -688,6 +693,7 @@ test("a sent pop that transcribes empty resumes read-aloud", async ({
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(
     () =>
       (window as unknown as { voiceFixture: { say: () => void } })
@@ -809,6 +815,7 @@ test("neural VAD hears quiet speech that energy misses (and only it does)", asyn
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   // Let the model load: 2.3 MB weights plus WASM compile, locally served.
   await page.waitForTimeout(3000);
   await play();
@@ -828,6 +835,7 @@ test("neural VAD hears quiet speech that energy misses (and only it does)", asyn
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   await play();
   await page.waitForTimeout(7500);
   expect(voiceCalls).toBe(1);
@@ -883,6 +891,7 @@ test("voice still works on energy when the neural model is missing", async ({
   await expect(
     page.getByRole("button", { name: "End voice chat" }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(
     () =>
       (window as unknown as { voiceFixture: { say: () => void } })
@@ -964,6 +973,7 @@ test("speaker echo is transcribed but never answered (loop breaker)", async ({
   await expect(
     page.getByRole("button", { name: "End voice chat", exact: true }),
   ).toBeVisible();
+  await openConversation(page);
   await page.evaluate(() =>
     (
       window as unknown as { voiceFixture: { say: () => void } }

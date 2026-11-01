@@ -212,6 +212,7 @@ export function CompanionHome({
   const bargeGuard = useRef<BargeGuard | null>(null);
   if (!bargeGuard.current) bargeGuard.current = new BargeGuard();
   const bargeAlive = useRef(false);
+  const bargeVoicedMs = useRef(0);
   const bargeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markSpoken = (phrase: string) => {
     bargeGuard.current?.markSpoke();
@@ -652,6 +653,17 @@ export function CompanionHome({
         diagnosticEnds.current.delete(diagnosticEnds.current.keys().next().value!);
       recordVoice("speech-end", { durationMs: Math.round(stats.voicedMs) });
       if (bargeGuard.current?.turnReady()) return;
+      // Frame rounding can make a 180ms pop pass the detector's 200ms
+      // minimum. It must not supersede a reply that is still in flight.
+      if (stats.voicedMs < 300 && (lock.current || speaking || pendingVoice.current?.duringSpeech)) {
+        recordVoice("detector-drop", {reason:"short"});
+        turns.current.reset();
+        voice.current?.closeStream();
+        pendingVoice.current = null;
+        speech.current?.resume();
+        voicePlayer.current?.resume();
+        return;
+      }
       if (streamingMode.current) {
         const decision = turns.current.wavReady(audio);
         // Dropped turns send nothing and get no check; the rest verify.
@@ -676,6 +688,7 @@ export function CompanionHome({
         duringSpeech: speaking,
       };
       bargeAlive.current = true;
+      bargeVoicedMs.current = 0;
       if (!(lock.current || speaking)) {
         openLaneForTurn();
         return;
@@ -693,23 +706,20 @@ export function CompanionHome({
       // reply audio until a completed voice turn actually supersedes it.
       // Otherwise a short noise burst can cancel Kokoro before its first
       // sentence is ready, leaving visible text with no playable audio.
-      stopSpeech(true);
-      recordVoice("interrupted");
-      // stopSpeech() stops local speech synchronously, so this mark lands
-      // right after the playback stop it measures.
-      const stopped = activeVoice.current;
-      if (
-        stopped &&
-        stopped.bargeDetectMs !== undefined &&
-        stopped.playbackStopMs === undefined
-      )
-        stopped.playbackStopMs = Date.now();
       // Only a turn still alive after confirmation opens the ASR lane.
       // Server invalidation waits for its completed transcript in send().
       if (bargeTimer.current) clearTimeout(bargeTimer.current);
       bargeTimer.current = setTimeout(() => {
         bargeTimer.current = null;
         if (!bargeAlive.current) return;
+        // Brief noise must survive confirmation before pausing playback.
+        if (bargeVoicedMs.current >= 300) {
+          stopSpeech(true);
+          recordVoice("interrupted");
+          const timing = activeVoice.current;
+          if (timing?.bargeDetectMs !== undefined && timing.playbackStopMs === undefined)
+            timing.playbackStopMs = Date.now();
+        }
         // ASR can listen beside reply generation. Invalidating the server
         // here would cancel the response even if this turns out to be echo
         // or a dropped burst. send() supersedes it after a real final turn.
@@ -727,10 +737,9 @@ export function CompanionHome({
       endSilenceMs: () =>
         isTurnComplete(partial)
           ? COMPLETE_END_SILENCE_MS
-          : streamingMode.current
-            ? 500
-            : 850,
+          : 1100,
       shouldExtend: () => isTurnContinuation(partial),
+      onSpeechProgress: (voicedMs) => { bargeVoicedMs.current = voicedMs; },
       onMlStatus: (ready, reason) => {
         if (ready) {
           setMlVadNote("");

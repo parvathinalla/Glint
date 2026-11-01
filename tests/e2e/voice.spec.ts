@@ -22,7 +22,7 @@ test("ending a session cannot dispatch a voice turn waiting for pause",async({pa
   await page.route("**/api/voice",route=>{voiceCalls++;return route.fulfill({json:{transcript:"New question.",epoch:route.request().postDataJSON().epoch}});});
   await page.route("**/api/phase",async route=>{phaseStarted=true;await phaseGate;await route.fulfill({json:session});});
   await page.route("**/api/vision/stop",route=>route.fulfill({json:session}));
-  await startVoice(page);
+  await startVoice(page, false);
   await page.getByRole("button",{name:"Open conversation"}).click();
   await page.getByRole("textbox",{name:"Message Glint"}).fill("Please help me get started.");
   await page.getByRole("button",{name:"Send message",exact:true}).click();
@@ -75,7 +75,6 @@ test("voice diagnostics require opt-in and share no transcript content", async (
   expect(JSON.stringify(batches)).toContain("reply-dispatched");
   expect(JSON.stringify(batches)).not.toContain("Private fixture question");
   expect(JSON.stringify(batches)).not.toContain("Fixture answer");
-  await page.getByRole("button", { name: "Close conversation" }).click();
   await page.getByRole("button", { name: "Open settings" }).click();
   await expect(page.getByText("Shared with this test server.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download voice diagnostics" })).toBeVisible();
@@ -96,7 +95,7 @@ test("old saved voiceprints no longer gate voice turns", async ({page, context})
   let voiceTurns = 0;
   await page.route("**/api/voice", route=>route.fulfill({json:{transcript:++voiceTurns === 1 ? "Hello Glint." : "What can you see on my desk?",epoch:route.request().postDataJSON().epoch}}));
   await page.route("**/api/agent/stream",route=>route.fulfill({json:{message:"Hello back.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}}));
-  await startVoice(page); await page.waitForTimeout(600);
+  await startVoice(page, false); await page.waitForTimeout(600);
   const firstReply = page.waitForResponse("**/api/agent/stream");
   await say(page); await firstReply;
   await expect(page.getByRole("dialog",{name:"Conversation",exact:true})).not.toBeVisible();
@@ -200,7 +199,7 @@ async function say(page: Page) {
       (window as unknown as { voiceFixture: { say: () => void } }).voiceFixture.say(),
   );
 }
-async function startVoice(page: Page) {
+async function startVoice(page: Page, showConversation = true) {
   await page.goto("/");
   await page
     .getByRole("button", { name: "Talk to Glint", exact: true })
@@ -208,6 +207,7 @@ async function startVoice(page: Page) {
   await expect(
     page.getByRole("button", { name: "End voice chat", exact: true }),
   ).toBeVisible();
+  if (showConversation) await page.getByRole("button", {name:"Open conversation"}).click();
 }
 
 test("opening the camera unlocks playback before requesting camera permission", async ({ page, context }) => {
@@ -484,7 +484,7 @@ test("barge-in cancels queued neural audio and answers the new turn", async ({
             type: "audio",
             seq: 0,
             text: "First sentence here.",
-            pcm: pcm(2),
+            pcm: pcm(3),
             sampleRate: 24000,
           },
           { type: "delta", text: "Second sentence here. " },
