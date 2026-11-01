@@ -17,8 +17,8 @@
     "postinstall": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs",
     "predev": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs",
     "prebuild": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-speaker.mjs && node scripts/prepare-tts.mjs",
-    "livekit:agent": "tsx server/livekit-agent.ts",
-    "livekit:download": "tsx server/livekit-agent.ts download-files"
+    "livekit:agent": "tsx server/livekit-runner.ts",
+    "livekit:download": "tsx server/livekit-runner.ts download-files"
   },
   "dependencies": {
     "@livekit/agents": "^1.9.5",

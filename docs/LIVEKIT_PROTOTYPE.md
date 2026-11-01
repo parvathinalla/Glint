@@ -66,12 +66,26 @@ or provider inference is triggered merely by building the frontend.
   this as an unrestricted public service.
 - The prototype does not construct legacy ASR sockets, device speech queues or
   Kokoro players. Remote audio is attached once via the LiveKit client.
+- Transcription uses only `lk.transcription` text streams, keyed by participant
+  identity and `lk.segment_id`. Interim/final streams update one entry; a late
+  partial cannot overwrite a final transcript. Repeated words in distinct real
+  turns are preserved rather than deduplicated by text.
 - Agent recording is explicitly disabled (`record:false`). Page transcripts are
   bounded to 60 entries and are not persisted by this feature. Provider retention
   and workspace-level logging policies are separate settings to review.
-- Content-free agent logs include state transitions and numeric timing metrics.
-  SDK/provider operational errors may have their own formats; do not upload raw
-  logs publicly without review.
+- The `livekit:agent` command runs an output-filtering launcher. SDK info/debug
+  records are dropped, warning/error records are reduced to classified events,
+  and our timing/state records use an explicit allowlist. Tagged SDK transcript
+  fields and unstructured text are not forwarded into the new launcher logs.
+  Historical logs from the earlier launcher may contain conversation text; they
+  are private ignored files and have not been rewritten by this change.
+- Do not invoke `server/livekit-worker.ts` directly for normal runs: that bypasses
+  the output filter. Both the runner and worker PID are recorded privately in
+  `.data/livekit/runtime.json` for controlled shutdown.
+- The worker uses the SDK server API directly. SDK 1.9.5's CLI overrides log-level
+  options and reconstructs `ServerOptions`, converting zero idle processes into
+  the production default. The launcher preserves zero idle warm processes and a
+  60-second initialization timeout; tests cover those effective settings.
 - Production CSP permits LiveKit Cloud HTTPS/WSS only when configured. Existing
   script/eval restrictions remain in place. Regional signaling uses LiveKit Cloud
   subdomains. No arbitrary user-supplied signaling hostname is accepted.
@@ -85,6 +99,45 @@ Measure speech-end to first audible answer, interruption stop time, missing/dupl
 turns, transcription accuracy, disconnect/reconnect, idle periods and per-minute
 usage. Keep model/provider changes separate when interpreting improvements.
 No latency or accuracy improvement is established until these live comparisons run.
+
+## First live test findings
+
+The first user test included intentional background-speaker interruptions. These
+must not be counted as accidental noise. This prototype does not identify which
+person is speaking. A speech-triggered pause alone is not a failure.
+
+The browser showed repeated interim/final transcripts because it consumed both
+legacy events and text streams, then keyed streams by stream ID. Worker logs also
+showed repeated initialization timeouts and SDK transcript fields despite our own
+metrics being content-free. The follow-up fixes address these observed problems.
+
+The five-minute agent limit overlapped the user's last speech. The page now
+explains the limit and ends browser media with a rejoin notice at its own deadline.
+Agent departure also disconnects the browser session instead of leaving it listening
+without an agent.
+
+Old metrics showed model request durations of roughly 1.2–4.5 seconds and a median
+TTS first-byte time of about 237 ms. These are different measurements, not full
+user-perceived latency. New metrics include cancellation, speech IDs, token counts,
+reasoning counts and end-of-turn/transcription delays to distinguish causes.
+
+A real isolated-room smoke test received an RTC audio frame and deleted the room
+without publishing microphone audio or recording media. Its startup-to-first-frame
+time was about 43 seconds under local resource pressure. An audio frame can be
+silence, so this is a transport/agent-startup check, not proof of an audible reply
+or a latency improvement. The smoke test intentionally canceled its greeting during
+cleanup, which is reflected as canceled model metrics. No image task was dispatched.
+
+Follow-up verification: all 360 unit/integration tests across 41 files passed;
+10 focused LiveKit tests were also rerun after the logging changes. Nine browser
+checks passed after separating the legacy app's eager imports from the prototype
+route. Earlier cold development-server navigations exceeded the 30-second test
+timeout on this resource-constrained laptop; the final run passed, including
+production CSP, transcript replacement, session deadline and legacy workspace
+checks. Build, TypeScript, lint and diff checks passed. The worker registered,
+returned HTTP 200 on its health endpoint and showed no further runner-init timeout
+events during the observed post-restart period. That observation does not establish
+production capacity or eliminate the remaining model/turn-detection latency.
 
 Automated checks use fake credentials and mocked API responses. They cover token
 scope, expiry, disabled mode, access checks, rate limits, cleanup retry and canceled

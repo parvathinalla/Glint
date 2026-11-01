@@ -50,6 +50,7 @@ test("ending a pending join cannot enable microphone capture after its token arr
 });
 
 test("a joined room uses one audio element, supports microphone controls and disconnects cleanly",async({page})=>{
+  await page.clock.install();
   const calls:boolean[]=[];let cleanups=0;
   await page.exposeFunction("microphoneToggle",(enabled:boolean)=>{calls.push(enabled);});
   await page.route("**/api/session",route=>route.fulfill({json:{csrf:"test-csrf"}}));
@@ -63,13 +64,16 @@ test("a joined room uses one audio element, supports microphone controls and dis
     export class Room {
       handlers={}; localParticipant={identity:'tester',setMicrophoneEnabled:async value=>window.microphoneToggle(value)};
       on(name,handler){this.handlers[name]=handler;return this;}
-      registerTextStreamHandler(){}
+      registerTextStreamHandler(_topic,callback){this.receive=callback;}
       async startAudio(){}
       async connect(){
         this.handlers.connection('connected');
         this.handlers.attributes({}, {attributes:{'lk.agent.state':'listening'}});
         this.handlers.track({kind:'audio',attach:()=>document.createElement('audio')});
-        this.handlers.transcript([{id:'one',text:'Ready for your test.'}],{isLocal:false});
+        this.handlers.transcript?.([{id:'legacy-one',text:'Ready for your test.'}],{isLocal:false});
+        for (const [streamId,text,final] of [['interim-a','Ready',false],['interim-b','Ready for your test.',false],['final','Ready for your test.',true]]) {
+          await this.receive({info:{id:streamId,attributes:{'lk.segment_id':'turn-one','lk.transcription_final':String(final)}},async *[Symbol.asyncIterator](){yield text;}},{identity:'agent'});
+        }
       }
       async disconnect(){await window.microphoneToggle(false);this.handlers.disconnected?.();}
     }
@@ -77,11 +81,16 @@ test("a joined room uses one audio element, supports microphone controls and dis
   await page.goto("/livekit");await page.getByLabel("Prototype access code").fill("test-only-access");
   await page.getByRole("button",{name:"Join voice prototype"}).click();
   await expect(page.getByRole("button",{name:"Mute microphone"})).toBeVisible();
-  await expect(page.getByRole("log")).toContainText("Ready for your test.");await expect(page.locator("audio")).toHaveCount(1);
+  await expect(page.getByRole("log")).toContainText("Ready for your test.");await expect(page.getByRole("log").locator("p")).toHaveCount(1);await expect(page.locator("audio")).toHaveCount(1);
   await expect(page.getByLabel("Prototype access code")).toHaveValue("");
   await page.getByRole("button",{name:"Mute microphone"}).click();await expect(page.getByRole("button",{name:"Unmute microphone"})).toBeVisible();
   await page.getByRole("button",{name:"Unmute microphone"}).click();
   await page.getByRole("button",{name:"End session"}).click();
   await expect(page.getByRole("status")).toContainText("Disconnected");await expect(page.locator("audio")).toHaveCount(0);
   expect(calls).toEqual([true,false,true,false]);expect(cleanups).toBe(1);
+  await page.getByLabel("Prototype access code").fill("test-only-access");await page.getByRole("button",{name:"Join voice prototype"}).click();
+  await expect(page.getByRole("button",{name:"Mute microphone"})).toBeVisible();
+  await page.clock.fastForward(5*60000+1);
+  await expect(page.getByRole("alert")).toHaveText("The five-minute test session finished. Join again to continue.");
+  await expect(page.getByRole("status")).toContainText("Disconnected");expect(cleanups).toBe(2);
 });
