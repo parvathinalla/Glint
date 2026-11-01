@@ -6,7 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { LookPreview } from "./LookPreview";
-import { wantsLookPreview, type LookPreviewResult } from "../shared/look-preview";
+import { wantsLookPreview, lookFollowup, type LookPreviewResult } from "../shared/look-preview";
 import {
   ArrowUp,
   Camera,
@@ -131,6 +131,7 @@ export function CompanionHome({
   const [lastTrackingClip, setLastTrackingClip] = useState<string | null>(null);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [lookRequest,setLookRequest]=useState("");
+  const [lookPrompt,setLookPrompt]=useState("");
   const [lookAccepted,setLookAccepted]=useState(false);
   const [lookVersion,setLookVersion]=useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -267,6 +268,7 @@ export function CompanionHome({
     instructionsUrl?: string,
     withImage = false,
     voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
+    skipLookRouting = false,
   ) {
     setEnded(false);
     if (voiceInput) recordVoice("turn-accepted", { reason: "lock-off" });
@@ -385,21 +387,35 @@ export function CompanionHome({
           return;
         }
       }
-      if(!instructionsUrl && lookRequest && /^(no|no thanks|not now|cancel)[.! ]*$/i.test(text.trim())){
-        setLookRequest("");setLookAccepted(false);setQuestion("");
-        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:"Photo preview dismissed. No photo was captured or sent."}].slice(-20) as Message[]);
+      if(!instructionsUrl && /\b(?:just ideas|text.only)\b/i.test(text)){
+        skipLookRouting=true;setLookRequest("");setLookAccepted(false);
+      }
+      const followup=!instructionsUrl&&!skipLookRouting&&lookRequest?lookFollowup(text,lookPrompt||lookRequest):null;
+      if(followup){
+        setQuestion("");
+        let reply="";
+        if(followup.kind==="dismiss"){
+          setLookRequest("");setLookAccepted(false);
+          reply="Photo preview closed. No new image generation was requested.";
+        }else if(followup.kind==="clarify"){
+          reply="Do you mean no photo preview, or do you want me to create the look? Your chosen look is still here.";
+        }else if(followup.kind==="photo"){
+          setLookAccepted(true);setLookPrompt(followup.request);
+          reply="Yes, I can create that look. Choose or take a photo of yourself in the look preview, then press Generate preview. You don't need a photo of the fairy look or any makeup supplies.";
+        }else{
+          setLookPrompt(followup.request);
+          reply=lookAccepted?"I've updated your chosen look. Choose a photo if needed, then press Generate preview when you're ready.":"Got it, I've saved that look preference. I can show it on a photo of you. Say create the image, or choose Yes, choose a photo in the preview.";
+        }
+        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:reply}].slice(-20) as Message[]);
+        stopSpeech();if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
         return;
       }
-      if(!instructionsUrl && lookRequest && /^(yes|yeah|yes please|show me|okay|ok)[.! ]*$/i.test(text.trim())){
-        setLookAccepted(true);setQuestion("");
-        setMessages(items=>[...items,{who:"you",text},{who:"glint",text:"Choose or take a photo in the look preview, describe the style, then press Generate preview."}].slice(-20) as Message[]);
-        return;
-      }
-      if(!instructionsUrl && wantsLookPreview(text)){
-        setLookRequest(text);setLookAccepted(false);setLookVersion(version=>version+1);setQuestion("");
-        const offer="I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
+      if(!instructionsUrl && !skipLookRouting && wantsLookPreview(text)){
+        const direct=lookFollowup(text,text)?.kind==="photo";
+        setLookRequest(text.slice(0,1500));setLookPrompt(text.slice(0,1500));setLookAccepted(direct);setLookVersion(version=>version+1);setQuestion("");
+        const offer=direct?"Choose or take a photo of yourself in the look preview, describe the look, then press Generate preview.":"I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
         setMessages(items=>[...items,{who:"you",text},{who:"glint",text:offer}].slice(-20) as Message[]);
-        if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
+        stopSpeech();if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
         return;
       }
       const intent = !instructionsUrl ? trackingIntent(text) : null;
@@ -482,6 +498,7 @@ export function CompanionHome({
           epoch,
           model: model || current.current.key.models[0],
           voice: isNeuralVoiceEnabled() ? "neural" : "off",
+          lookPreview:lookRequest&&!skipLookRouting?{request:lookPrompt,stage:lookAccepted?"photo-controls":"offered"}:undefined,
           requestId: crypto.randomUUID(),
         },
         controller.signal,
@@ -1245,7 +1262,7 @@ export function CompanionHome({
               <button className="glint-text" onClick={() => { setTrackingRequested(false); setTrackProblem(""); }}>Not now</button>
             </div>}
           </div>}
-          {lookRequest&&!ended&&<LookPreview key={lookVersion} request={lookRequest} accepted={lookAccepted} onAccept={()=>setLookAccepted(true)} onDismiss={()=>{setLookRequest("");setLookAccepted(false);}} onIdeas={()=>{const question=lookRequest;setLookRequest("");setLookAccepted(false);void send("Give me text-only ideas; do not generate images. "+question);}} generate={generateLook} cancel={()=>void interrupt(false)}/>}
+          {lookRequest&&!ended&&<LookPreview key={lookVersion} request={lookPrompt} accepted={lookAccepted} onPromptChange={setLookPrompt} onAccept={()=>setLookAccepted(true)} onDismiss={()=>{setLookRequest("");setLookAccepted(false);}} onIdeas={()=>{const question=lookPrompt||lookRequest;setLookRequest("");setLookAccepted(false);void send("Give me text-only ideas; do not generate images. "+question,undefined,false,undefined,true);}} generate={generateLook} cancel={()=>void interrupt(false)}/>}
           {busy && <p className="glint-wait"><LoaderCircle className="spin" size={17}/>{researching ? "Reading your instructions…" : "Thinking…"}</p>}
         </div>
         {problem && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}</div>}

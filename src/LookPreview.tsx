@@ -16,11 +16,13 @@ async function jpegPhoto(blob: Blob): Promise<string> {
   } finally {image.close();}
 }
 
-export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,generate,cancel}: {
+export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,onPromptChange,generate,cancel}: {
   request:string;accepted:boolean;onAccept:()=>void;onDismiss:()=>void;onIdeas:()=>void;
+  onPromptChange:(prompt:string)=>void;
   generate:(photo:string,prompt:string)=>Promise<LookPreviewResult>;cancel:()=>void;
 }) {
-  const [photo,setPhoto]=useState(""),[prompt,setPrompt]=useState(request),[result,setResult]=useState("");
+  const [photo,setPhoto]=useState(""),[result,setResult]=useState("");
+  const prompt=request;
   const [busy,setBusy]=useState(false),[preparing,setPreparing]=useState(false),[error,setError]=useState("");
   const alive=useRef(true),selection=useRef(0),job=useRef(0),working=useRef(false);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;selection.current++;job.current++;};},[]);
@@ -59,7 +61,7 @@ export function LookPreview({request,accepted,onAccept,onDismiss,onIdeas,generat
         <legend>Photo and look</legend>
         <label className="glint-text">{photo?"Replace photo":"Choose a photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>{void select(event.target.files?.[0]);event.target.value="";}}/></label>
         <label className="glint-text">Take a photo<input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={event=>{void select(event.target.files?.[0]);event.target.value="";}}/></label>
-        <label className="glint-look-prompt">{result?"What would you like to change?":"Describe the look"}<textarea value={prompt} maxLength={1500} onChange={event=>setPrompt(event.target.value)} placeholder="For example: a celestial witch costume with soft silver makeup"/></label>
+        <label className="glint-look-prompt">{result?"What would you like to change?":"Describe the look"}<textarea value={prompt} maxLength={1500} onChange={event=>onPromptChange(event.target.value)} placeholder="For example: a celestial witch costume with soft silver makeup"/></label>
       </fieldset>
       <small>Your photo is sent to Meta only when you generate. Glint keeps photos and previews in this page’s memory; it does not save them to its database. Each generation uses your connected key and one session call.</small>
       {preparing&&<p role="status">Preparing your photo…</p>}

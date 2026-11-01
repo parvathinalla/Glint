@@ -5,10 +5,25 @@ import { Engine } from "../server/engine";
 import { AgentProvider } from "../server/agent-provider";
 import { SamProvider } from "../server/sam-provider";
 import { Store } from "../server/store";
-import { lookPreviewInput, wantsLookPreview } from "../shared/look-preview";
+import { lookPreviewInput, wantsLookPreview,lookFollowup } from "../shared/look-preview";
 const png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=";
 const engines:Engine[]=[];
 afterEach(()=>engines.splice(0).forEach(engine=>engine.close()));
+it("carries look choices into explicit image followups and keeps ambiguous no from dismissing",()=>{
+  const start="Which Halloween look suits me?";
+  const fantasy=lookFollowup("fantasy makeup",start)!;
+  const fairy=lookFollowup("I want fairy.",fantasy.request)!;
+  expect(fairy.kind).toBe("style");expect(fairy.request).toContain("fairy");
+  for(const text of ["I don't have anything right now, just you create a image I will see if that looks good I will go and buy the stuff","can I choose a photo?","I want an image","yes"]){
+    const result=lookFollowup(text,fairy.request)!;expect(result.kind).toBe("photo");expect(result.request).toContain("fairy");
+  }
+  expect(lookFollowup("No.",fairy.request)?.kind).toBe("clarify");
+  expect(lookFollowup("Don't create an image",fairy.request)?.kind).toBe("dismiss");
+  expect(lookFollowup("Cancel the preview",fairy.request)?.kind).toBe("dismiss");
+  expect(lookFollowup("Which port is HDMI?",fairy.request)).toBeNull();
+  expect(lookFollowup("Create a fairy makeup image",start)?.request).toContain("fairy makeup");
+  expect(lookFollowup("create an image","")).toBeNull();
+});
 it("recognizes look requests without treating ordinary questions or refusals as consent",()=>{
   expect(wantsLookPreview("Which Halloween look suits me?")).toBe(true);
   expect(wantsLookPreview("Show a vampire costume on me")).toBe(true);
@@ -62,5 +77,19 @@ it("discards a generation after the session is canceled",async()=>{
   const pending=engine.previewLook(session,{photo:"reference",prompt:"witch",consent:true,epoch:session.epoch,requestId:randomUUID()});
   engine.phase(session,"paused");release();
   await expect(pending).rejects.toMatchObject({code:"CANCELED"});
+});
+it("gives Spark the current look context after older conversation history",async()=>{
+  let body="";
+  const agent=new AgentProvider((async(_url,init)=>{
+    body=String(init?.body);return Response.json({status:"completed",output:[{type:"message",content:[{type:"output_text",text:"Choose your own photo in the preview."}]}]});
+  }) as typeof fetch);
+  const engine=new Engine(new Store(":memory:"),{models:async()=>["muse-spark-test"],infer:async()=>{throw Error("Unexpected dispatch");}},Date.now,agent);
+  engines.push(engine);const {session}=engine.session();await engine.connect(session,"TEST_ONLY_KEY");
+  session.agentHistory=[{role:"assistant",content:"Older conversation."}];
+  await engine.converse(session,{question:"What do I do next?",model:"muse-spark-test",epoch:session.epoch,requestId:randomUUID(),lookPreview:{request:"Fairy makeup with a purple cape",stage:"photo-controls"}});
+  expect(body).toContain("Never claim the app cannot create or edit images");
+  expect(body).toContain("Fairy makeup with a purple cape");
+  const input=JSON.stringify(JSON.parse(body).input);
+  expect(input.indexOf("lookPreviewContext")).toBeGreaterThan(input.indexOf("Older conversation."));
 });
 

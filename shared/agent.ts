@@ -58,6 +58,7 @@ export const agentInput = z
     frames: z.array(videoFrame).min(1).max(6).optional(),
     events: z.array(visualEvent).max(4).optional(),
     voice: z.enum(["neural", "off"]).optional(),
+    lookPreview: z.object({request:z.string().max(1500),stage:z.enum(["offered","photo-controls"])}).optional(),
   })
   .refine(
     (input) => !(input.image && input.frames?.length),

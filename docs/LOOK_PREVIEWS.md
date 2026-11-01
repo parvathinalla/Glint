@@ -2,7 +2,12 @@
 
 A request such as "Which Halloween look suits me?" offers a preview. This is a
 local, conservative intent match, not a general tool-calling agent. "Yes" opens
-the photo controls; "No, just ideas" sends a normal text-only request. During
+the photo controls; follow-up style choices (for example fantasy then fairy)
+update the same preview description without discarding a selected photo. Requests
+such as "create an image" or "can I choose a photo?" open the photo controls. A
+bare "No" asks for clarification; explicit cancellation closes the flow. "No, just
+ideas" sends a normal text-only request. Spark also receives current look context
+and is told that Glint supports image previews, without receiving photo bytes. During
 camera/voice use, a main-screen link opens the card without reopening chat by itself.
 
 The user chooses or takes a JPEG, PNG or WebP photo (up to 10 MB), describes the

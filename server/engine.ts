@@ -441,6 +441,7 @@ export class Engine {
             ...(s.agentSource ? [s.agentSource] : []),
             ...recent,
             ...s.agentHistory,
+            ...(input.lookPreview?[{role:"user" as const,content:JSON.stringify({lookPreviewContext:input.lookPreview})}]:[]),
           ],
           input.question,
           input.url,
