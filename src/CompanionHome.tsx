@@ -262,7 +262,6 @@ export function CompanionHome({
     withImage = false,
     voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
   ) {
-    setConversationOpen(true);
     setEnded(false);
     if (voiceInput) recordVoice("turn-accepted", { reason: "lock-off" });
     if (lock.current) {

@@ -93,10 +93,21 @@ test("old saved voiceprints no longer gate voice turns", async ({page, context})
     (window as unknown as {__glintSpeaker:{embed:()=>never}}).__glintSpeaker={embed:()=>{throw Error("Speaker inference must not run");}};
   });
   await connectedSession(page);
-  await page.route("**/api/voice", route=>route.fulfill({json:{transcript:"Hello Glint.",epoch:route.request().postDataJSON().epoch}}));
+  let voiceTurns = 0;
+  await page.route("**/api/voice", route=>route.fulfill({json:{transcript:++voiceTurns === 1 ? "Hello Glint." : "What can you see on my desk?",epoch:route.request().postDataJSON().epoch}}));
   await page.route("**/api/agent/stream",route=>route.fulfill({json:{message:"Hello back.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}}));
-  await startVoice(page); await page.waitForTimeout(600); await say(page);
+  await startVoice(page); await page.waitForTimeout(600);
+  const firstReply = page.waitForResponse("**/api/agent/stream");
+  await say(page); await firstReply;
+  await expect(page.getByRole("dialog",{name:"Conversation",exact:true})).not.toBeVisible();
+  await page.getByRole("button",{name:"Open conversation"}).click();
   await expect(page.getByText("Hello back.",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Close conversation"}).click();
+  await context.grantPermissions(["camera","microphone"]);
+  await page.getByRole("button",{name:"Open camera",exact:true}).click();
+  const cameraReply = page.waitForResponse("**/api/agent/stream");
+  await page.waitForTimeout(1600); await say(page); await cameraReply;
+  await expect(page.getByRole("dialog",{name:"Conversation",exact:true})).not.toBeVisible();
 });
 
 /** 24 kHz mono 16-bit sine for mocked neural audio (0.5 amplitude). */
