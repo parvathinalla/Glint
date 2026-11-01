@@ -2,19 +2,17 @@
 
 Branch: `codex/conversation-ui`, based on `task/a-realtime-asr`.
 
-Implemented UI: direct welcome with a floating silver-blue star, a single Start Glint action,
+Implemented UI: direct welcome with the approved sky-blue jelly star with pale champagne highlights, a single Start Glint action,
 companion home, independent camera/microphone controls, camera flip/fullscreen,
 conversation sheet, settings with system/light/dark appearance, captions and
 spoken replies, masked provider-key settings, optional instructions links,
 opt-in diagnostics, and an explicit session-ended state.
 
 There is no walking intro or separate home typing bar. Typed input lives inside
-Conversation. The companion uses a local WebGL surface with silver-blue shading,
-soft rim lighting, glowing eyes, and subtle state-driven motion. Speaking pulses
-follow the speaking state, not the audio waveform. Reduced motion renders a still
-frame; hidden surfaces skip drawing. Rendering is capped at 30 fps and 1.5 device
-pixel ratio. Header marks and unsupported/lost GPU contexts use the SVG fallback.
-No extra graphics dependency, model call, microphone access, or video loop is used.
+Conversation. The companion and header use the approved transparent PNG artwork
+at `public/avatars/glint-jelly-sky-champagne-v1.png`. It is a still image, not
+Muse Realtime Avatar or a generated talking video. No WebGL renderer, model call,
+microphone access, or video loop is needed for the artwork.
 
 Camera start and fullscreen never start the microphone. Mic off stops input;
 spoken replies have their own setting. End session stops media, aborts work and

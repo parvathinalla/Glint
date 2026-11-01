@@ -95,12 +95,8 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
 }
 @media (prefers-reduced-motion:reduce) { .glint-star-scene>.spark { animation:none; } }
 
-/* Silver-blue companion inspired by the floating reference, with a vector fallback. */
-.silver-star { display:inline-block; position:relative; isolation:isolate; }
-.silver-star-canvas, .silver-star-fallback { position:absolute; inset:0; width:100%; height:100%; }
-.silver-star-canvas { opacity:0; pointer-events:none; }
-.silver-star-fallback>.spark { width:100%; height:100%; margin:0; }
-.silver-star-ready>.silver-star-canvas { opacity:1; }
-.silver-star-ready>.silver-star-fallback { visibility:hidden; }
-.glint-star-scene>.silver-star { animation:none; filter:none; }
+/* Approved sky-blue jelly artwork, with pale champagne highlights. */
+.jelly-star { object-fit:contain; display:block; user-select:none; }
+.glint-star-scene>.jelly-star { width:250px; height:260px; animation:none; filter:drop-shadow(0 12px 15px #263b5418); }
 .glint-star-orbit, .glint-star-scene>.glint-sparkle { display:none; }
+@media(max-width:600px) { .glint-star-scene>.jelly-star { width:230px; height:240px; } }
