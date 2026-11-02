@@ -83,6 +83,7 @@ export class AgentProvider {
     const ambiguousFragment=question.trim().split(/\s+/).length===1;
     const allowCameraActions=!ambiguousFragment&&!!capabilities&&!capabilities.imageInProgress&&!isTaskStatusQuestion(question)&&!/^(?:ok(?:ay)?|yes|yeah|thanks|thank you)[.!?]*$/i.test(question.trim());
     const streaming = !!onDelta && !url;
+    const canStreamAnswer=!capabilities||!allowCameraActions;
     const response = await this.fetcher(`${BASE}/responses`, {
       method: "POST",
       signal,
@@ -145,7 +146,7 @@ export class AgentProvider {
           .parse(raw);
         if (event.type === "response.output_text.delta" && event.delta) {
           const text = natural.push(event.delta);
-          if (text && !capabilities) onDelta?.(text);
+          if (text && canStreamAnswer) onDelta?.(text);
         }
         if (
           [
@@ -163,7 +164,7 @@ export class AgentProvider {
           );
       });
       const remaining = natural.finish();
-      if (remaining && !capabilities) onDelta?.(remaining);
+      if (remaining && canStreamAnswer) onDelta?.(remaining);
     } else body = await read(response);
     const parsed = outputSchema.safeParse(body);
     if (!parsed.success)
@@ -228,7 +229,7 @@ export class AgentProvider {
         "SOURCE_UNVERIFIED",
         "Muse could not retrieve cited instructions for that link. Try the official manual link, or ask Glint for help finding it. No instructions were assumed.",
       );
-    if(capabilities&&onDelta)onDelta(message);
+    if(capabilities&&onDelta&&(!streaming||!canStreamAnswer))onDelta(message);
     return { message, sources, searched };
   }
   async observe(

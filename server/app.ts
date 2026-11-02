@@ -436,6 +436,7 @@ export function createApp(engine: Engine, origin: string, production = false, li
       // The neural voice loads beside the LLM stream so cold starts never
       // delay text; early deltas buffer until the voice announces itself.
       let tts: TtsStream | null = null;
+      const currentTts=():TtsStream|null=>tts;
       let buffered = "";
       let receivedText = false;
       res.on("close", () => {
@@ -448,47 +449,41 @@ export function createApp(engine: Engine, origin: string, production = false, li
         }
       });
       try {
+        const voiceReady=input.voice==="neural"?getServerVoice().catch(()=>null):null;
+        let preparingVoice:Promise<void>|undefined;
+        const prepareVoice=()=>preparingVoice??=Promise.resolve(voiceReady).then(voice=>{
+          if(res.destroyed||finished)return;
+          if(voice){tts=new TtsStream(voice,event=>emit(event),{
+            onTiming:(ms,chars,timing)=>console.info(`[glint-timing] ${JSON.stringify({scope:"server",lane:"tts",ms,chars,...timing})}`),
+          });tts.announce();tts.push(buffered);buffered="";}
+          else emit({type:"voice",mode:"none"});
+        });
         const replyPromise = engine.converse(session, input, (text) => {
           if (text) receivedText = true;
           emit({ type: "delta", text });
           if (tts) tts.push(text);
           else buffered += text;
+          if(voiceReady&&text)void prepareVoice();
         });
-        const voiceReady=input.voice==="neural"?getServerVoice().catch(()=>null):null;
         const planned=input.cameraTools?await replyPromise:undefined;
         if(planned?.action){
           // Tool execution must not wait for synthesis or expose tool arguments.
           emit({type:"voice",mode:"none"});emit({type:"done",reply:planned});finished=true;return;
         }
         if (voiceReady) {
-          const voice = await voiceReady;
-          if (voice && !res.destroyed) {
-            tts = new TtsStream(
-              voice,
-              (event) => emit(event),
-              {
-                onTiming: (ms, chars, timing) =>
-                  console.info(
-                    `[glint-timing] ${JSON.stringify({ scope: "server", lane: "tts", ms, chars, ...timing })}`,
-                  ),
-              },
-            );
-            tts.announce();
-            tts.push(buffered);
-            buffered = "";
-          } else emit({ type: "voice", mode: "none" });
+          await prepareVoice();
         }
         const reply = planned??await replyPromise;
         // Research and JSON provider responses do not emit text deltas.
         // Feed their final text to the same voice pipeline exactly once.
-        if (tts && !receivedText) tts.push(reply.message);
+        if (!receivedText) currentTts()?.push(reply.message);
         emit({ type: "done", reply });
-        if (tts) {
-          await tts.finish();
+        if (currentTts()) {
+          await currentTts()!.finish();
           emit({ type: "voice-done" });
         }
       } catch (error) {
-        tts?.cancel();
+        currentTts()?.cancel();
         emit({
           type: "error",
           message:

@@ -57,9 +57,10 @@ export class TtsStream {
   private enqueue(raw: string) {
     const text = cleanSpeakText(raw);
     if (!text) return;
-    const seq = this.seq++;
     this.tail = this.tail.then(async () => {
       if (this.cancelled) return;
+      let emitted=false;
+      const seq=this.seq++;
       // The installed Kokoro voice uses an English lexicon. Do not spend
       // CPU silently skipping Telugu words; let the device voice try them.
       if (this.deviceOnly || (this.voice.name === "kokoro-af-heart" && /[\u0C00-\u0C7F]/u.test(text))) {
@@ -69,13 +70,17 @@ export class TtsStream {
       }
       try {
         const started = performance.now();
-        const audio = await this.voice.synth(text, this.controller.signal);
+        const audio = await this.voice.synth(text, this.controller.signal,this.voice.streaming?(samples,sampleRate)=>{
+          if(this.cancelled)return;
+          this.emit({type:"audio",seq:emitted?this.seq++:seq,text:emitted?"":text,pcm:toPcm16Base64(samples),sampleRate});
+          emitted=true;
+        }:undefined);
         this.options.onTiming?.(
           Math.round(performance.now() - started),
           text.length,
           audio.timing,
         );
-        if (this.cancelled) return;
+        if (this.cancelled||emitted) return;
         this.emit({
           type: "audio",
           seq,
@@ -86,7 +91,8 @@ export class TtsStream {
       } catch {
         if (this.cancelled) return;
         this.deviceOnly = true;
-        this.emit({ type: "audio-error", seq, text });
+        // A partially played sentence must never be repeated in another voice.
+        this.emit({ type: "audio-error", seq:emitted?this.seq++:seq, text:emitted?"":text });
       }
     });
   }

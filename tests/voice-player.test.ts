@@ -118,6 +118,14 @@ it("announces each sentence for tests and tooling", () => {
   expect(events).toEqual([{ seq: 0, text: "Hello." }]);
 });
 
+it("plays PCM continuation chunks without clearing the sentence or speaking it twice",()=>{
+  const {player,sources,said,utterances}=stage();player.unlock();
+  player.playAudio({seq:0,text:"Hello.",pcm:pcmBase64(120),sampleRate:24000});
+  player.playAudio({seq:1,text:"",pcm:pcmBase64(120),sampleRate:24000});
+  player.audioError("");sources[0].onended!();
+  expect(sources).toHaveLength(2);expect(said).toEqual(["Hello."]);expect(utterances).toHaveLength(0);
+});
+
 it("ignores duplicate audio but accepts the next reply after finish", () => {
   const { player, sources } = stage();
   player.unlock();

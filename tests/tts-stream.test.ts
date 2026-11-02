@@ -17,6 +17,26 @@ class ScriptedVoice implements GlintVoice {
 const tone = (seconds: number) =>
   new Float32Array(Math.round(seconds * 24000)).fill(0.1);
 
+it("emits streaming audio before synthesis finishes, with unique sequences and no duplicate sentence",async()=>{
+  let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+  const events:TtsEvent[]=[];
+  const voice:GlintVoice={name:"cloud",sampleRate:24000,streaming:true,async synth(text,signal,onAudio){
+    onAudio!(tone(0.1),24000);await gate;signal?.throwIfAborted();onAudio!(tone(0.1),24000);return {samples:new Float32Array(),sampleRate:24000};
+  }};
+  const stream=new TtsStream(voice,event=>events.push(event));stream.push("Hello there.");const done=stream.finish();
+  await Promise.resolve();expect(events.filter(e=>e.type==="audio")).toHaveLength(1);
+  release();await done;
+  const audio=events.filter(e=>e.type==="audio");expect(audio.map(e=>e.seq)).toEqual([0,1]);expect(audio.map(e=>e.text)).toEqual(["Hello there.",""]);
+});
+it("does not replay partially emitted speech through device fallback or emit chunks after cancellation",async()=>{
+  const events:TtsEvent[]=[];let cancel:(()=>void)|undefined=undefined;
+  const voice:GlintVoice={name:"cloud",sampleRate:24000,streaming:true,async synth(_text,_signal,onAudio){onAudio!(tone(0.1),24000);cancel?.();onAudio!(tone(0.1),24000);throw Error("provider disconnected");}};
+  const stream=new TtsStream(voice,event=>events.push(event));stream.push("Hello there.");await stream.finish();
+  expect(events.find(e=>e.type==="audio-error")).toMatchObject({text:""});
+  events.length=0;const canceled=new TtsStream(voice,event=>events.push(event));cancel=()=>canceled.cancel();canceled.push("Hello there.");await canceled.finish();
+  expect(events.filter(e=>e.type==="audio")).toHaveLength(1);expect(events.some(e=>e.type==="audio-error")).toBe(false);
+});
+
 it("routes Telugu to device speech without invoking the English Kokoro lexicon", async () => {
   const voice = new ScriptedVoice(() => tone(0.5));
   voice.name = "kokoro-af-heart";

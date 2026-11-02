@@ -1,6 +1,20 @@
 import { test, expect, type Page } from "./fixture";
 test.use({ reducedMotion: "reduce" });
 
+test("cloud PCM continuation chunks play once without a device voice switch",async({page,context})=>{
+  await context.grantPermissions(["microphone"]);await syntheticMicrophone(page);await neuralClient(page);await connectedSession(page);
+  await page.route("**/api/voice",route=>route.fulfill({json:{transcript:"Please help me.",epoch:route.request().postDataJSON().epoch}}));
+  await page.route("**/api/agent/stream",route=>route.fulfill({contentType:"text/event-stream",body:sse(
+    {type:"delta",text:"Hello there."},{type:"voice",mode:"neural",sampleRate:24000,voice:"cloud"},
+    ...[0,1,2].map(seq=>({type:"audio",seq,text:seq===0?"Hello there.":"",pcm:pcm(0.12),sampleRate:24000})),
+    {type:"done",reply:{message:"Hello there.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}},{type:"voice-done"},
+  )}));
+  await startVoice(page);await page.waitForTimeout(600);await say(page);
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {heard:unknown[]}).heard.length)).toBe(3);
+  expect(await page.evaluate(()=>(window as unknown as {spoken:string[]}).spoken)).toEqual([]);
+  expect(await page.evaluate(()=>(window as unknown as {heard:{seq:number;text:string}[]}).heard)).toEqual([{seq:0,text:"Hello there."},{seq:1,text:""},{seq:2,text:""}]);
+});
+
 test("ending a session cannot dispatch a voice turn waiting for pause",async({page,context})=>{
   await context.grantPermissions(["microphone"]);
   await syntheticMicrophone(page);

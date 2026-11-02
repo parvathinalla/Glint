@@ -90,6 +90,7 @@ export class SherpaKokoroVoice implements GlintVoice {
 let cached: GlintVoice | null | undefined;
 let failedAt = 0;
 let pending: Promise<GlintVoice | null> | null = null;
+let cloudVoice:GlintVoice|undefined;
 /**
  * The request-scoped voice: mock for tests, Kokoro when its files are
  * present, otherwise null (the reply falls back to device speech).
@@ -102,7 +103,7 @@ export function getServerVoice(): Promise<GlintVoice | null> {
   if (process.env.GLINT_NEURAL_VOICE === "0") return Promise.resolve(null);
   if(process.env.GLINT_TTS_PROVIDER==="livekit"){
     // Never initialize Kokoro when cloud voice is explicitly selected.
-    try{return Promise.resolve(createLiveKitVoice());}catch{return Promise.resolve(null);}
+    try{return Promise.resolve(cloudVoice??=createLiveKitVoice());}catch{return Promise.resolve(null);}
   }
   if (cached !== undefined) {
     if (cached === null && Date.now() - failedAt < 60000)

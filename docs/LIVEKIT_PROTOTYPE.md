@@ -9,7 +9,27 @@ requires `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `GLINT_LIVEKIT_TTS_MODEL`, and
 reply/playback channel, not a second conversation agent or a LiveKit audio room.
 Existing model prompts, camera tools, ASR, and cancellation remain in place.
 Device speech remains the existing fallback. Full room transport is a later step.
-Synthesis closes its stream/connections on completion, failure, and cancellation.
+Synthesis closes its stream on completion, failure, and cancellation; the SDK
+connection pool is reused as described below.
+
+### Incremental voice delivery
+
+Cloud speech now reuses the SDK connection pool and emits roughly 120 ms PCM
+chunks through the existing response channel. Each chunk has its own sequence;
+only the first carries the sentence text. Cancellation drops late chunks. A
+failure after partial playback does not replay that sentence in the device voice.
+Streams close per sentence; pooled connections remain owned by the cached voice
+for reuse. Local `/api/speech` announcements still collect their JSON response.
+
+Safe answers can start synthesis from text deltas when camera actions are disabled
+for that request. Turns offering camera tools still buffer text until validation,
+so tool arguments and speculative action narration never enter the speech lane.
+Model reasoning settings and speech-end timing are unchanged.
+
+One synthetic Cartesia probe on this laptop measured first audio at 1705 ms with
+sentence buffering, versus 257 ms and 397 ms with incremental delivery on two
+subsequent calls. These are TTS-only samples, not end-to-end voice benchmarks or
+guaranteed production latency. Provider load, network and connection warmth vary.
 
 This branch introduces an isolated `/livekit` page and a separately started Node
 agent. `/` keeps the existing Glint camera, voice and image flow. This is a voice

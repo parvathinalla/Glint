@@ -6,9 +6,15 @@ vi.mock("@livekit/agents",()=>({initializeLogger:vi.fn(),inference:{TTS:class{
 }}}));
 import {createLiveKitVoice} from "../server/tts-livekit.ts";
 const env={GLINT_LIVEKIT_TTS_MODEL:"cartesia/sonic-3",GLINT_LIVEKIT_TTS_VOICE:"test",LIVEKIT_API_KEY:"test",LIVEKIT_API_SECRET:"test"};
-it("converts cloud PCM and releases stream and connections",async()=>{
+it("converts cloud PCM and releases the stream while keeping pooled connections reusable",async()=>{
   state.closed=0;const sample=await createLiveKitVoice(env).synth("Hello");
-  expect([...sample.samples]).toEqual([0,0.5,-1]);expect(sample.sampleRate).toBe(24000);expect(state.closed).toBe(2);
+  expect([...sample.samples]).toEqual([0,0.5,-1]);expect(sample.sampleRate).toBe(24000);expect(state.closed).toBe(1);
+});
+it("delivers PCM through the streaming callback without buffering a second copy",async()=>{
+  const chunks:number[][]=[];const voice=createLiveKitVoice(env);
+  const sample=await voice.synth("Hello",undefined,samples=>chunks.push([...samples]));
+  expect(chunks).toEqual([[0,0.5,-1]]);expect(sample.samples.length).toBe(0);
+  await voice.synth("Again");
 });
 it("rejects missing configuration and canceled requests before synthesis",async()=>{
   expect(()=>createLiveKitVoice({})).toThrow("configuration");

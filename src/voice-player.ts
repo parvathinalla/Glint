@@ -94,6 +94,7 @@ export class VoicePlayer {
   }
   /** Speak one failed sentence on the device voice, in stream order. */
   audioError(text: string) {
+    if(!text.trim())return;
     this.fallbackCount++;
     this.queue.push({ text, device: true });
     this.pump();
@@ -199,7 +200,7 @@ export class VoicePlayer {
     this.current = source;
     this.active = true;
     this.report();
-    this.onSpeak?.(next.text);
+    if(next.text)this.onSpeak?.(next.text);
     window.dispatchEvent(
       new CustomEvent("glint-voice-audio", {
         detail: { seq: next.seq, text: next.text },

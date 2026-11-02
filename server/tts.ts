@@ -7,7 +7,8 @@ export type VoiceSample = {
 export type GlintVoice = {
   name: string;
   sampleRate: number;
-  synth(text: string, signal?: AbortSignal): Promise<VoiceSample>;
+  synth(text: string, signal?: AbortSignal, onAudio?: (samples:Float32Array,sampleRate:number)=>void): Promise<VoiceSample>;
+  streaming?:boolean;
   close?(): void;
 };
 /**
