@@ -568,6 +568,21 @@ export function createApp(engine: Engine, origin: string, production = false, li
       ),
     ),
   );
+  const localVoiceRequests=new WeakMap<object,number>();
+  app.post("/api/speech",async(req,res)=>{
+    const input=z.object({text:z.string().trim().min(1).max(1000),epoch:z.number().int()}).strict().parse(req.body);
+    const session=s(res);
+    if(!engine.view(session).key.connected)throw new Problem(401,"KEY_REQUIRED","Connect your model key first.");
+    if(input.epoch!==session.epoch)throw new Problem(409,"STALE","This reply is no longer current.");
+    if(Date.now()-(localVoiceRequests.get(session)??0)<1500)throw new Problem(429,"VOICE_LIMIT","Wait before requesting another voice reply.");
+    localVoiceRequests.set(session,Date.now());
+    const voice=await getServerVoice();if(!voice)throw new Problem(503,"VOICE_UNAVAILABLE","Cloud voice is unavailable.");
+    const events:unknown[]=[];let finished=false;
+    const stream=new TtsStream(voice,event=>events.push(event));
+    res.on("close",()=>{if(!finished)stream.cancel();});
+    stream.push(input.text);await stream.finish();finished=true;
+    if(!res.destroyed)res.json({events});
+  });
   app.post("/api/key", async (req, res) => {
     const v = z.object({ key: z.string().max(512) }).parse(req.body);
     res.json(await engine.connect(s(res), v.key));

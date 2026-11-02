@@ -273,7 +273,9 @@ export function CompanionHome({
   if (!voicePlayer.current)
     voicePlayer.current = new VoicePlayer(setSpeaking, markSpoken, recordPlayback);
   const pause = useRef<Promise<void> | null>(null);
+  const localVoiceRequest=useRef<AbortController|null>(null);
   const stopSpeech = useCallback((soft = false) => {
+    if(!soft){localVoiceRequest.current?.abort();localVoiceRequest.current=null;}
     if (soft) {
       speech.current?.softStop();
       voicePlayer.current?.softStop();
@@ -307,7 +309,19 @@ export function CompanionHome({
   function localTaskReply(text:string,reply:string){
     stopSpeech();
     setQuestion("");setMessages(items=>[...items,{who:"you",text},{who:"glint",text:reply}].slice(-20) as Message[]);
-    if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
+    speakLocalReply(reply);
+  }
+  function speakLocalReply(text:string){
+    if(!aloud.current)return;
+    if(!isNeuralVoiceEnabled()){speech.current?.push(text);speech.current?.finish();return;}
+    localVoiceRequest.current?.abort();const controller=new AbortController();localVoiceRequest.current=controller;
+    void api("speech",{text:text.slice(0,1000),epoch:current.current.epoch},"POST",controller.signal).then(result=>{
+      if(controller.signal.aborted||!aloud.current)return;
+      const {events}=result as {events:({type:"audio"}&import("./voice-player").VoiceAudio|{type:"audio-error";text:string})[]};
+      for(const event of events)if(event.type==="audio")voicePlayer.current?.playAudio(event);
+      // Preserve the selected voice; a failed local announcement stays visible as text.
+      voicePlayer.current?.finish();
+    }).catch(()=>{if(!controller.signal.aborted)traceClient({stage:"voice",reason:"fallback"});});
   }
   function answerTaskControl(text:string){
     if(isTaskCancelRequest(text)){cancelCameraTask();localTaskReply(text,"The camera task was canceled.");return true;}
@@ -342,7 +356,7 @@ export function CompanionHome({
           const reply=await streamAgent(current.current.csrf,{question:text,image,capturedAt,epoch:current.current.epoch,model:model||current.current.key.models[0],voice:"off",requestId:crypto.randomUUID(),cameraTools:{camera:cameraActive.current,tracking:false,lastImage:taskRunner.current?.imageAvailable??false,imageInProgress:true,lastResult:lastTaskSummary.current||"Image generation is running."}},controller.signal,()=>{});
           if(controller.signal.aborted||job.version!==generation.current||reply.epoch!==current.current.epoch)continue;
           setMessages(items=>[...items,{who:"glint",text:reply.message}].slice(-20) as Message[]);
-          if(aloud.current){speech.current?.push(reply.message);speech.current?.finish();}
+          speakLocalReply(reply.message);
         }catch(error){if(!controller.signal.aborted&&job.version===generation.current)setProblem(error instanceof Error?error.message:"The follow-up could not finish. Please repeat it.");}
         finally{if(followupController.current===controller)followupController.current=null;}
       }
@@ -513,7 +527,7 @@ export function CompanionHome({
           reply=lookAccepted?"I've updated your chosen look. Choose a photo if needed, then press Generate preview when you're ready.":"Got it, I've saved that look preference. I can show it on a photo of you. Say create the image, or choose Yes, preview the look in the preview.";
         }
         setMessages(items=>[...items,{who:"you",text},{who:"glint",text:reply}].slice(-20) as Message[]);
-        stopSpeech();if(aloud.current){speech.current?.push(reply);speech.current?.finish();}
+        stopSpeech();speakLocalReply(reply);
         return;
       }
       if(!toolsEnabled && !instructionsUrl && !skipLookRouting && wantsLookPreview(text)){
@@ -521,7 +535,7 @@ export function CompanionHome({
         setLookRequest(text.slice(0,1500));setLookPrompt(text.slice(0,1500));setLookAccepted(direct);setLookVersion(version=>version+1);setQuestion("");
         const offer=direct?"Capture the current Glint camera view in the look preview, describe the look, then press Generate preview.":"I can create a look preview on a photo you choose. Pick a style such as celestial witch, vampire, or fantasy makeup, then choose whether you want a photo preview.";
         setMessages(items=>[...items,{who:"you",text},{who:"glint",text:offer}].slice(-20) as Message[]);
-        stopSpeech();if(aloud.current){speech.current?.push(offer);speech.current?.finish();}
+        stopSpeech();speakLocalReply(offer);
         return;
       }
       const intent = !toolsEnabled && !instructionsUrl ? trackingIntent(text) : null;
@@ -549,7 +563,7 @@ export function CompanionHome({
         setTrackProblem("");
         stopSpeech();
         setMessages(items => [...items, { who: "you", text }, { who: "glint", text: response }].slice(-20) as Message[]);
-        if (aloud.current) { speech.current?.push(response); speech.current?.finish(); }
+        speakLocalReply(response);
         return;
       }
       stopSpeech();
@@ -833,7 +847,7 @@ export function CompanionHome({
       if(event.state==="result"||event.state==="error"||event.state==="canceled"){
         lastTaskSummary.current=event.kind==="generated"?`${event.state}: image generation.`:`${event.state}: ${event.kind??"task"}: ${event.detail}`.slice(0,700);
         if(event.kind!=="annotated"||event.state!=="result")setMessages(items=>[...items,{who:"glint",text:event.kind==="generated"?event.title:`${event.title}. ${event.detail}`}].slice(-20) as Message[]);
-        if(aloud.current&&(event.kind!=="annotated"||event.state!=="result")){stopSpeech();speech.current?.push(event.title+". "+(event.kind==="check"?event.detail:""));speech.current?.finish();}
+        if(aloud.current&&(event.kind!=="annotated"||event.state!=="result")){stopSpeech();speakLocalReply(event.title+". "+(event.kind==="check"?event.detail:""));}
       }
     },
   };
@@ -869,7 +883,7 @@ export function CompanionHome({
         ? `I could not confirm the ${concept}'s movement. ${result.reason}`
         : `Recorded ${concept}: ${result.direction.replaceAll("-", " ")}, relative to the camera. ${result.reason}`;
       setMessages(items => [...items, { who: "glint", text: resultText, motion: result }].slice(-20) as Message[]);
-      if (aloud.current) { speech.current?.push(resultText); speech.current?.finish(); }
+      speakLocalReply(resultText);
       nextObservation.current=Date.now()+6000;
     } catch(error) {
       if(!controller.signal.aborted && token===generation.current)
@@ -1512,7 +1526,7 @@ export function CompanionHome({
           <p className="glint-setting-note">{view.calls} of {view.limit} session calls used. Camera checks also use this allowance.</p>
           <button className="glint-text" disabled={!online} onClick={()=>void newCallSession()}>Start a new call allowance</button><small>Ends this session, clears conversation and images, resets the allowance, and disconnects your key. Provider charges still apply.</small>
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); openLink(); }}><span>Add instructions link<small>Use a public product page or manual</small></span><Link size={18}/></button>
-          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates requested previews from the camera or a previous result. Ambiguous requests need clarification. Local Kokoro generates speech with device-voice fallback.</p></details>
+          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates requested previews from the camera or a previous result. Ambiguous requests need clarification. Speech uses the configured neural voice with device-voice fallback.</p></details>
           <details className="glint-advanced"><summary>Diagnostic trace</summary><p>Automatic event tracing records request timing, speech stages, task states, routing and failures. No conversation text, keys, audio or images. The latest 500 browser events and 500 events per server source stay in memory; server events also appear in local server logs. Download after a problem, before closing the page or restarting.</p><button className="glint-text" onClick={()=>void downloadTrace()}>Download diagnostic trace</button>{traceStatus&&<p role="status">{traceStatus}</p>}</details>
           <details className="voice-diagnostics glint-advanced"><summary>Voice test diagnostics</summary><p>Optional event names and timings only. No audio, transcript, images, voiceprints or keys. Up to 120 events remain in this page; shared events appear in server logs.</p>
             <label className="glint-setting-row"><span>Record and share voice diagnostics</span><input type="checkbox" checked={diagnosticsOn} onChange={event => { if (event.target.checked) { diagnostics.current.start(); setDiagnosticEvents([]); } else diagnostics.current.stop(); setDiagnosticUpload(""); setDiagnosticsOn(event.target.checked); }}/></label>

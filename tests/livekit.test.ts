@@ -1,4 +1,4 @@
-import {afterEach,expect,it} from "vitest";
+import {afterEach,expect,it,vi} from "vitest";
 import {createServer,type Server} from "node:http";
 import {once} from "node:events";
 import {TokenVerifier} from "livekit-server-sdk";
@@ -39,10 +39,28 @@ it("requires explicit worker and model configuration rather than silently buying
   expect(()=>livekitAgentConfig({...env,GLINT_LIVEKIT_AGENT_ENABLED:"1"})).toThrow("Missing prototype settings");
   const agentEnv={...env,GLINT_LIVEKIT_AGENT_ENABLED:"1",GLINT_LIVEKIT_STT_MODEL:"test/stt",GLINT_LIVEKIT_TTS_MODEL:"test/tts",GLINT_LIVEKIT_TTS_VOICE:"test-voice",GLINT_LIVEKIT_LLM_PROVIDER:"baseten",GLINT_LIVEKIT_LLM_MODEL:"meta-models/muse-spark-open-1026",BASETEN_API_KEY:"TEST_ONLY_KEY"};
   expect(livekitAgentConfig(agentEnv)).toMatchObject({llmURL:"https://inference.baseten.co/v1",llmModel:"meta-models/muse-spark-open-1026"});
+  const metaEnv={...agentEnv,GLINT_LIVEKIT_LLM_PROVIDER:"meta",GLINT_LIVEKIT_LLM_MODEL:"muse-spark-1.3",MODEL_API_KEY:"TEST_META_KEY"};
+  expect(livekitAgentConfig(metaEnv)).toMatchObject({llmProvider:"meta",llmURL:"https://api.meta.ai/v1",llmKey:"TEST_META_KEY",llmModel:"muse-spark-1.3"});
+  expect(()=>livekitAgentConfig({...metaEnv,MODEL_API_KEY:""})).toThrow("meta API key");
+  expect(()=>livekitAgentConfig({...metaEnv,GLINT_LIVEKIT_LLM_MODEL:"meta-models/muse-spark-open-1026"})).toThrow("Meta API muse-spark");
 });
 
 let server:Server|undefined,engine:Engine|undefined;
-afterEach(async()=>{server?.closeAllConnections();if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));engine?.close();server=undefined;engine=undefined;});
+afterEach(async()=>{vi.unstubAllEnvs();server?.closeAllConnections();if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));engine?.close();server=undefined;engine=undefined;});
+it("synthesizes local replies only for an authorized current connected session",async()=>{
+  vi.stubEnv("GLINT_TTS_MOCK","1");
+  engine=new Engine(new Store(":memory:"),{models:async()=>["muse-spark-test"],infer:async()=>{throw Error("No model calls");}});
+  server=createServer(createApp(engine,"http://glint.test",false));server.listen(0,"127.0.0.1");await once(server,"listening");
+  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+  const initial=await fetch(base+"/api/session"),cookie=initial.headers.get("set-cookie")!.split(";")[0],session=await initial.json();
+  const headers={Cookie:cookie,Origin:"http://glint.test","x-glint-csrf":session.csrf,"Content-Type":"application/json"};
+  const speak=(epoch=session.epoch)=>fetch(base+"/api/speech",{method:"POST",headers,body:JSON.stringify({text:"Your image is ready.",epoch})});
+  expect((await speak()).status).toBe(401);
+  const connected=await fetch(base+"/api/key",{method:"POST",headers,body:JSON.stringify({key:"TEST_ONLY_MODEL_KEY"})});expect(connected.status).toBe(200);session.epoch=(await connected.json()).epoch;
+  expect((await speak(session.epoch+1)).status).toBe(409);
+  const result=await speak();expect(result.status).toBe(200);expect((await result.json()).events.some((e:{type:string})=>e.type==="audio")).toBe(true);
+  expect((await speak()).status).toBe(429);
+});
 it("protects token and cleanup routes with the existing cookie, origin and CSRF boundary",async()=>{
   engine=new Engine(new Store(":memory:"),{models:async()=>[],infer:async()=>{throw Error("No live model calls");}});
   const rooms=new LiveKitSessions(()=>config,Date.now,async()=>{});

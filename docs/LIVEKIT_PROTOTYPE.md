@@ -1,5 +1,16 @@
 # LiveKit voice prototype
 
+## Existing Glint cloud voice adapter
+
+Set `GLINT_TTS_PROVIDER=livekit` to replace Kokoro synthesis on the original
+Glint page with the configured LiveKit Inference TTS model and voice. This
+requires `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `GLINT_LIVEKIT_TTS_MODEL`, and
+`GLINT_LIVEKIT_TTS_VOICE`. Restart the app. It uses the existing single PCM
+reply/playback channel, not a second conversation agent or a LiveKit audio room.
+Existing model prompts, camera tools, ASR, and cancellation remain in place.
+Device speech remains the existing fallback. Full room transport is a later step.
+Synthesis closes its stream/connections on completion, failure, and cancellation.
+
 This branch introduces an isolated `/livekit` page and a separately started Node
 agent. `/` keeps the existing Glint camera, voice and image flow. This is a voice
 comparison, not a production migration: camera/image tools, saved conversations,
@@ -17,7 +28,12 @@ managed user authentication and durable worker jobs are not wired into this path
    `GLINT_LIVEKIT_TTS_VOICE` using LiveKit's supported model/voice catalog.
    These use **LiveKit Inference**; they are not covered by the BaseTen hackathon
    key. No model is silently selected or enabled by the code.
-6. Choose `GLINT_LIVEKIT_LLM_PROVIDER=baseten` with `BASETEN_API_KEY` and the
+6. Recommended: choose `GLINT_LIVEKIT_LLM_PROVIDER=meta`, set server-only
+   `MODEL_API_KEY`, and use `GLINT_LIVEKIT_LLM_MODEL=muse-spark-1.3` (requires
+   access to that model). The browser's session-only Glint key is not shared
+   with this worker. Meta requests use `https://api.meta.ai/v1`; there is no
+   automatic fallback to another provider. Restart the worker after configuring.
+   For the older comparison, choose `baseten` with `BASETEN_API_KEY` and the
    exact hackathon model `meta-models/muse-spark-open-1026`; alternatively use
    `fireworks`, `FIREWORKS_API_KEY` and a model available to that account.
    Adapter compatibility, model reasoning and Telugu accuracy need live testing.

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { GlintVoice, VoiceSample } from "./tts.ts";
 import { MockVoice, serializeVoice } from "./tts.ts";
+import {createLiveKitVoice} from "./tts-livekit.ts";
 /** af_heart in the sherpa Kokoro multi-lang speaker map (0-52). */
 export const KOKORO_VOICE_ID = 3;
 export const KOKORO_SAMPLE_RATE = 24000;
@@ -99,6 +100,10 @@ export function getServerVoice(): Promise<GlintVoice | null> {
   if (process.env.GLINT_TTS_MOCK === "1")
     return Promise.resolve(serializeVoice(new MockVoice()));
   if (process.env.GLINT_NEURAL_VOICE === "0") return Promise.resolve(null);
+  if(process.env.GLINT_TTS_PROVIDER==="livekit"){
+    // Never initialize Kokoro when cloud voice is explicitly selected.
+    try{return Promise.resolve(createLiveKitVoice());}catch{return Promise.resolve(null);}
+  }
   if (cached !== undefined) {
     if (cached === null && Date.now() - failedAt < 60000)
       return Promise.resolve(null);
