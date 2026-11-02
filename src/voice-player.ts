@@ -25,6 +25,7 @@ export type VoicePlaybackState = {
   lastSeq: number;
   fallback: number;
 };
+export type PlaybackSummary={reason:"complete"|"canceled"|"paused"|"resumed";receivedChunks:number;playedChunks:number;droppedChunks:number;queuedChunks:number};
 type Queued = { buffer: AudioBuffer; text: string; seq: number } | { text: string; device: true };
 /**
  * Plays the server's neural voice gaplessly and falls back to device
@@ -44,10 +45,16 @@ export class VoicePlayer {
   private robot: SpeechQueue;
   private robotSpeaking = false;
   private fallbackCount = 0;
+  private receivedChunks=0;
+  private playedChunks=0;
+  private droppedChunks=0;
+  private inputDone=false;
+  private summarized=false;
   constructor(
     private changed: (speaking: boolean) => void,
     private onSpeak?: (text: string) => void,
     private onPlayback?: (state: "audio-scheduled" | "device-playback-start" | "playback-blocked") => void,
+    private options:{allowDeviceFallback?:()=>boolean;onUnavailable?:()=>void;onSummary?:(summary:PlaybackSummary)=>void}={},
   ) {
     this.robot = new SpeechQueue((speaking) => {
       this.robotSpeaking = speaking;
@@ -79,12 +86,15 @@ export class VoicePlayer {
   playAudio(audio: VoiceAudio) {
     if (audio.seq <= this.heardSeq) return;
     this.heardSeq = audio.seq;
+    if(this.summarized){this.receivedChunks=0;this.playedChunks=0;this.droppedChunks=0;this.summarized=false;}
+    this.inputDone=false;this.receivedChunks++;
     // Mobile browsers suspend audio outside gestures (lock screen, tab
     // switch, calls); resume on arrival so playback never wedges silent.
     const ctx = this.ensureCtx();
     if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
     const buffer = this.decode(audio);
     if (!buffer) {
+      this.droppedChunks++;
       this.audioError(audio.text);
       return;
     }
@@ -95,12 +105,14 @@ export class VoicePlayer {
   /** Speak one failed sentence on the device voice, in stream order. */
   audioError(text: string) {
     if(!text.trim())return;
+    if(this.options.allowDeviceFallback?.()===false){this.options.onUnavailable?.();return;}
     this.fallbackCount++;
     this.queue.push({ text, device: true });
     this.pump();
   }
   /** No more audio is coming; drain the queue, then report idle. */
   finish() {
+    this.inputDone=true;
     this.heardSeq = -1;
     this.fallbackCount = 0;
     this.robot.finish();
@@ -108,6 +120,8 @@ export class VoicePlayer {
     this.report();
   }
   cancel() {
+    this.droppedChunks+=this.queue.filter(item=>!("device" in item)).length+(this.current?1:0);
+    this.summary("canceled");
     this.generation++;
     this.stopCurrent();
     this.queue = [];
@@ -116,6 +130,7 @@ export class VoicePlayer {
     this.active = false;
     this.paused = false;
     this.robot.cancel();
+    this.receivedChunks=0;this.playedChunks=0;this.droppedChunks=0;this.summarized=false;this.inputDone=false;
     this.report();
   }
   /**
@@ -124,12 +139,14 @@ export class VoicePlayer {
    * with resume() or cancel().
    */
   softStop() {
+    if(this.current)this.droppedChunks++;
     this.generation++;
     this.stopCurrent();
     this.active = false;
     this.paused = true;
     this.robot.softStop();
     this.robotSpeaking = false;
+    this.summary("paused");
   }
   /** Resume a softStop() when the interruption proved to be echo. */
   resume() {
@@ -137,6 +154,7 @@ export class VoicePlayer {
     this.robot.resume();
     if (this.queue.length) this.pump();
     else this.report();
+    this.summary("resumed");
   }
   private ensureCtx(): AudioContext | null {
     if (!this.ctx && typeof window !== "undefined" && window.AudioContext) {
@@ -193,6 +211,7 @@ export class VoicePlayer {
     source.onended = () => {
       if (version !== this.generation) return;
       this.current = null;
+      this.playedChunks++;
       this.active = false;
       if (this.queue.length && !this.paused) this.pump();
       else this.report();
@@ -214,8 +233,13 @@ export class VoicePlayer {
       this.active ||
       this.robotSpeaking ||
       (!this.paused && this.queue.length > 0);
+    if(!speaking&&this.inputDone&&!this.paused&&!this.summarized){this.summary("complete");this.summarized=true;}
     if (speaking === this.speaking) return;
     this.speaking = speaking;
     this.changed(speaking);
+  }
+  private summary(reason:PlaybackSummary["reason"]){
+    if(!this.receivedChunks)return;
+    this.options.onSummary?.({reason,receivedChunks:this.receivedChunks,playedChunks:this.playedChunks,droppedChunks:this.droppedChunks,queuedChunks:this.queue.filter(item=>!("device" in item)).length});
   }
 }

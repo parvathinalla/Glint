@@ -15,7 +15,7 @@ function pcmBase64(samples: number): string {
   for (let i = 0; i < samples; i++) bytes[i * 2 + 1] = 64;
   return Buffer.from(bytes).toString("base64");
 }
-function stage() {
+function stage(options:ConstructorParameters<typeof VoicePlayer>[3]={}) {
   const sources: FakeSource[] = [];
   const contexts: { resumed: number; state: string }[] = [];
   const events: Array<{ seq: number; text: string }> = [];
@@ -76,10 +76,27 @@ function stage() {
   const player = new VoicePlayer(
     (value) => changed.push(value),
     (text) => said.push(text),
+    undefined,options,
   );
   return { sources, contexts, events, utterances, changed, said, player };
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it("summarizes played versus canceled PCM without counting cancellation as playback",()=>{
+  const summaries:import("../src/voice-player").PlaybackSummary[]=[];
+  const {player,sources}=stage({onSummary:s=>summaries.push(s)});player.unlock();
+  for(let seq=0;seq<3;seq++)player.playAudio({seq,text:seq?"":"Hello.",pcm:pcmBase64(120),sampleRate:24000});
+  sources[0].onended!();player.cancel();
+  expect(summaries.at(-1)).toMatchObject({reason:"canceled",receivedChunks:3,playedChunks:1,droppedChunks:2});
+  sources[1].onended!();expect(summaries.at(-1)?.playedChunks).toBe(1);
+});
+it("summarizes a complete drain and keeps cloud failure out of device speech",()=>{
+  const summaries:import("../src/voice-player").PlaybackSummary[]=[];let unavailable=0;
+  const {player,sources,utterances}=stage({allowDeviceFallback:()=>false,onUnavailable:()=>unavailable++,onSummary:s=>summaries.push(s)});player.unlock();
+  player.audioError("Do not change voice.");expect(utterances).toEqual([]);expect(unavailable).toBe(1);
+  player.playAudio({seq:0,text:"Hello.",pcm:pcmBase64(120),sampleRate:24000});player.finish();sources[0].onended!();
+  expect(summaries.at(-1)).toMatchObject({reason:"complete",receivedChunks:1,playedChunks:1,droppedChunks:0,queuedChunks:0});
+});
 
 it("plays neural audio and device fallback in one queue without overlap", () => {
   const { player, sources, utterances, said } = stage();

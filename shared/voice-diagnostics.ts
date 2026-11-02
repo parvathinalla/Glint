@@ -9,6 +9,7 @@ export const voiceDiagnostic = z.object({
     "reply-dispatched", "first-text", "audio-received", "device-fallback",
     "audio-scheduled", "device-playback-start", "playback-blocked", "interrupted",
     "transport-gap", "transport-closed",
+    "playback-summary", "voice-unavailable",
   ]),
   elapsedMs: z.number().finite().min(0).max(86400000),
   durationMs: z.number().finite().min(0).max(86400000).optional(),

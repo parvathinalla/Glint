@@ -452,6 +452,7 @@ export class Engine {
           ),
         }),
       });
+    const converseStarted=this.now();let firstConverseText=false;
     const result = await this.agentCall(
       s,
       input.epoch,
@@ -475,11 +476,13 @@ export class Engine {
             ? (text) => {
                 if (s.epoch !== input.epoch || s.controller?.signal.aborted)
                   return;
+                if(text&&!firstConverseText){firstConverseText=true;traceServer(s,{stage:"stream-first-text",operation:"converse",requestId:input.requestId,durationMs:this.now()-converseStarted});}
                 onDelta(text);
               }
             : undefined,
           input.frames,
           input.cameraTools,
+          durationMs=>traceServer(s,{stage:"provider-first-text",operation:"converse",requestId:input.requestId,durationMs}),
         ),
     );
     traceServer(s,{stage:"route",operation:"converse",requestId:input.requestId,action:result.action?.name??"answer",count:input.question.length});

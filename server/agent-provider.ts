@@ -79,7 +79,10 @@ export class AgentProvider {
     onDelta?: (text: string) => void,
     frames?: VideoFrame[],
     capabilities?:CameraCapabilities,
+    onFirstText?:(durationMs:number)=>void,
   ): Promise<Omit<AgentReply, "epoch">> {
+    const started=performance.now();let firstText=false;
+    const reportFirstText=()=>{if(!firstText){firstText=true;onFirstText?.(Math.round(performance.now()-started));}};
     const ambiguousFragment=question.trim().split(/\s+/).length===1;
     const allowCameraActions=!ambiguousFragment&&!!capabilities&&!capabilities.imageInProgress&&!isTaskStatusQuestion(question)&&!/^(?:ok(?:ay)?|yes|yeah|thanks|thank you)[.!?]*$/i.test(question.trim());
     const streaming = !!onDelta && !url;
@@ -145,6 +148,7 @@ export class AgentProvider {
           })
           .parse(raw);
         if (event.type === "response.output_text.delta" && event.delta) {
+          reportFirstText();
           const text = natural.push(event.delta);
           if (text && canStreamAnswer) onDelta?.(text);
         }
@@ -200,6 +204,7 @@ export class AgentProvider {
       .filter((x) => x.type === "message")
       .flatMap((x) => x.content ?? [])
       .filter((x) => x.type === "output_text");
+    if(blocks.some(block=>block.text))reportFirstText();
     const message = naturalReply(
       blocks
         .map((x) => x.text ?? "")

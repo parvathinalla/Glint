@@ -1,6 +1,33 @@
 import { test, expect, type Page } from "./fixture";
 test.use({ reducedMotion: "reduce" });
 
+test("ending stays immediate when server pause hangs and late confirmation cannot revive the session",async({page,context})=>{
+  await context.grantPermissions(["microphone"]);await syntheticMicrophone(page);await neuralClient(page);await connectedSession(page);
+  let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+  await page.route("**/api/vision/stop",async route=>{await gate;await route.fulfill({json:{epoch:999,key:{connected:false},csrf:"late-response"}}).catch(()=>{});});
+  await startVoice(page);await page.getByRole("button",{name:"Close conversation"}).click();await page.clock.install();
+  await page.getByRole("button",{name:"End session",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();
+  await page.clock.fastForward(5500);
+  await expect(page.getByRole("alert")).toHaveText("Couldn’t confirm the pause. Reconnect before trying again.");
+  release();await page.clock.fastForward(1000);
+  await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();
+  await page.getByRole("button",{name:"Open settings"}).click();await expect(page.getByRole("button",{name:/^Model connected/})).toBeVisible();
+});
+
+test("cloud synthesis errors keep text visible without silently speaking on the device",async({page,context})=>{
+  await context.grantPermissions(["microphone"]);await syntheticMicrophone(page);await neuralClient(page);await connectedSession(page);
+  await page.route("**/api/voice",route=>route.fulfill({json:{transcript:"Please help me.",epoch:route.request().postDataJSON().epoch}}));
+  await page.route("**/api/agent/stream",route=>route.fulfill({contentType:"text/event-stream",body:sse(
+    {type:"delta",text:"Hello there."},{type:"voice",mode:"neural",sampleRate:24000,voice:"cloud"},
+    {type:"audio-error",seq:0,text:"Hello there."},
+    {type:"done",reply:{message:"Hello there.",sources:[],searched:false,epoch:route.request().postDataJSON().epoch}},{type:"voice-done"},
+  )}));
+  await startVoice(page);await page.waitForTimeout(600);await say(page);
+  await expect(page.getByText("Cloud voice unavailable. The reply is shown in the conversation.",{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>(window as unknown as {spoken:string[]}).spoken)).toEqual([]);
+});
+
 test("cloud PCM continuation chunks play once without a device voice switch",async({page,context})=>{
   await context.grantPermissions(["microphone"]);await syntheticMicrophone(page);await neuralClient(page);await connectedSession(page);
   await page.route("**/api/voice",route=>route.fulfill({json:{transcript:"Please help me.",epoch:route.request().postDataJSON().epoch}}));
@@ -46,8 +73,8 @@ test("ending a session cannot dispatch a voice turn waiting for pause",async({pa
   await page.getByRole("button",{name:"Close conversation"}).click();
   await page.getByRole("button",{name:"End session",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();
-  const phaseResponse=page.waitForResponse("**/api/phase");
-  releasePhase();releaseAnswer();await phaseResponse;
+  // Ending supersedes and aborts the older pause; its late response is ignored.
+  releasePhase();releaseAnswer();
   await page.waitForTimeout(400);
   expect(voiceCalls).toBe(0);expect(answerCalls).toBe(1);
   await expect(page.getByRole("heading",{name:"Session ended."})).toBeVisible();

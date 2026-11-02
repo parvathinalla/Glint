@@ -3,7 +3,7 @@ import {AgentProvider} from "../server/agent-provider";
 const capabilities={camera:true,tracking:true,lastImage:false};
 const edit={type:"function_call",status:"completed",call_id:"call-1",name:"edit_camera_image",arguments:JSON.stringify({prompt:"Fairy makeup",source:"camera"})};
 it.each([false,true])("streams early text only when camera actions are disabled: tools=%s",async tools=>{
- const parts:string[]=[];let early="";
+ const parts:string[]=[];let early="";const timings:number[]=[];
  const agent=new AgentProvider((async()=>new Response(new ReadableStream({async start(controller){
    const send=(event:unknown)=>controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
    send({type:"response.reasoning_text.delta",delta:"PRIVATE_REASONING"});
@@ -11,7 +11,8 @@ it.each([false,true])("streams early text only when camera actions are disabled:
    await new Promise(resolve=>setTimeout(resolve,20));early=parts.join("");
    send({type:"response.completed",response:{status:"completed",output:tools?[edit]:[{type:"message",content:[{type:"output_text",text:"Hello there."}]}]}});controller.close();
  }}),{headers:{"content-type":"text/event-stream"}})) as typeof fetch);
- const result=await agent.reply("TEST_ONLY_KEY","muse-spark-test",[],tools?"Create an image":"Okay",undefined,undefined,new AbortController().signal,text=>parts.push(text),undefined,capabilities);
+ const result=await agent.reply("TEST_ONLY_KEY","muse-spark-test",[],tools?"Create an image":"Okay",undefined,undefined,new AbortController().signal,text=>parts.push(text),undefined,capabilities,ms=>timings.push(ms));
+ expect(timings).toHaveLength(1);expect(timings[0]).toBeGreaterThanOrEqual(0);
  if(tools){expect(early).toBe("");expect(parts).toEqual([]);expect(result.action).toBeDefined();}
  else {expect(early).toBe("Hello there. ");expect(parts.join("")).toBe("Hello there. ");}
 });

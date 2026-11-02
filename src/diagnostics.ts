@@ -11,6 +11,6 @@ export async function tracedFetch(path:string,input:RequestInfo|URL,init?:Reques
     traceClient({stage:"request-end",operation,status:response.status,durationMs:Math.round(performance.now()-started),...(id.success?{requestId:id.data}:{})});
     return response;
   }catch(error){
-    traceClient({stage:"request-error",operation,reason:init?.signal?.aborted?"canceled":"network",durationMs:Math.round(performance.now()-started)});throw error;
+    traceClient({stage:"request-error",operation,reason:init?.signal?.aborted?(init.signal.reason?.name==="TimeoutError"?"timeout":"canceled"):"network",durationMs:Math.round(performance.now()-started)});throw error;
   }
 }

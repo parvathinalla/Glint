@@ -8,7 +8,10 @@ requires `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `GLINT_LIVEKIT_TTS_MODEL`, and
 `GLINT_LIVEKIT_TTS_VOICE`. Restart the app. It uses the existing single PCM
 reply/playback channel, not a second conversation agent or a LiveKit audio room.
 Existing model prompts, camera tools, ASR, and cancellation remain in place.
-Device speech remains the existing fallback. Full room transport is a later step.
+The original Glint UI keeps cloud voice consistent: cloud failure leaves the reply
+visible with a notice instead of silently switching to device speech. Explicitly
+selecting device voice with the existing kill switch still works. Full room
+transport is a later step.
 Synthesis closes its stream on completion, failure, and cancellation; the SDK
 connection pool is reused as described below.
 
@@ -30,6 +33,20 @@ One synthetic Cartesia probe on this laptop measured first audio at 1705 ms with
 sentence buffering, versus 257 ms and 397 ms with incremental delivery on two
 subsequent calls. These are TTS-only samples, not end-to-end voice benchmarks or
 guaranteed production latency. Provider load, network and connection warmth vary.
+
+### Pause and playback reliability
+
+Pause/end stop local media immediately and bound server confirmation to five
+seconds. Superseded confirmations are aborted and late results are ignored. A
+failed confirmation blocks subsequent model dispatch until a successful retry,
+reconnection, or session reset; Start again retries an unconfirmed pause. Session
+reset is also bounded. Local speech announcements have a twenty-second deadline.
+
+Content-free playback summaries distinguish received, completed, dropped and
+queued PCM chunks at cancellation, pause, resume and final drain. A started chunk
+is not counted as completed until its audio source ends normally. Camera capture,
+frame encoding and server first-text timings are logged separately to investigate
+the remaining model/validation latency without changing reasoning or prompts.
 
 This branch introduces an isolated `/livekit` page and a separately started Node
 agent. `/` keeps the existing Glint camera, voice and image flow. This is a voice

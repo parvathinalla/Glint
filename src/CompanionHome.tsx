@@ -1,4 +1,5 @@
 import {clientDiagnostics,traceClient} from "./diagnostics";
+import {withRequestDeadline} from "./request-deadline";
 import {
   useCallback,
   useEffect,
@@ -271,8 +272,14 @@ export function CompanionHome({
   if (!speech.current)
     speech.current = new SpeechQueue(setSpeaking, markSpoken, () => recordPlayback("device-playback-start"));
   if (!voicePlayer.current)
-    voicePlayer.current = new VoicePlayer(setSpeaking, markSpoken, recordPlayback);
+    voicePlayer.current = new VoicePlayer(setSpeaking, markSpoken, recordPlayback,{
+      allowDeviceFallback:()=>!isNeuralVoiceEnabled(),
+      onUnavailable:()=>setVoiceNote("Cloud voice unavailable. The reply is shown in the conversation."),
+      onSummary:({reason,...counts})=>traceClient({stage:"voice",voiceStage:"playback-summary",turn:replyDiagnosticTurn.current,reason:reason==="canceled"?"canceled":reason==="complete"?"normal":reason==="paused"?"playback-paused":"playback-resumed",...counts}),
+    });
   const pause = useRef<Promise<void> | null>(null);
+  const pauseRequest=useRef<AbortController|null>(null);
+  const pauseUnconfirmed=useRef(false);
   const localVoiceRequest=useRef<AbortController|null>(null);
   const stopSpeech = useCallback((soft = false) => {
     if(!soft){localVoiceRequest.current?.abort();localVoiceRequest.current=null;}
@@ -315,13 +322,14 @@ export function CompanionHome({
     if(!aloud.current)return;
     if(!isNeuralVoiceEnabled()){speech.current?.push(text);speech.current?.finish();return;}
     localVoiceRequest.current?.abort();const controller=new AbortController();localVoiceRequest.current=controller;
-    void api("speech",{text:text.slice(0,1000),epoch:current.current.epoch},"POST",controller.signal).then(result=>{
+    void withRequestDeadline(signal=>api("speech",{text:text.slice(0,1000),epoch:current.current.epoch},"POST",signal),20000,controller.signal).then(result=>{
       if(controller.signal.aborted||!aloud.current)return;
       const {events}=result as {events:({type:"audio"}&import("./voice-player").VoiceAudio|{type:"audio-error";text:string})[]};
       for(const event of events)if(event.type==="audio")voicePlayer.current?.playAudio(event);
       // Preserve the selected voice; a failed local announcement stays visible as text.
       voicePlayer.current?.finish();
-    }).catch(()=>{if(!controller.signal.aborted)traceClient({stage:"voice",reason:"fallback"});});
+      if(events.some(event=>event.type==="audio-error"))setVoiceNote("Cloud voice unavailable. The reply is shown in the conversation.");
+    }).catch(()=>{if(!controller.signal.aborted){traceClient({stage:"voice",voiceStage:"voice-unavailable"});setVoiceNote("Cloud voice unavailable. The reply is shown in the conversation.");}});
   }
   function answerTaskControl(text:string){
     if(isTaskCancelRequest(text)){cancelCameraTask();localTaskReply(text,"The camera task was canceled.");return true;}
@@ -441,17 +449,23 @@ export function CompanionHome({
     try {
       if (pause.current) await pause.current;
       if (controller.signal.aborted || token !== generation.current) return;
+      if(pauseUnconfirmed.current)throw Error("The pause was not confirmed. Reconnect before sending another request.");
       epoch = current.current.epoch;
       const sampleFrames = withImage
         ? (async () => {
+            const started=performance.now();traceClient({stage:"capture-start",turn:diagnosticTurn.current});
             let frame = await camera.sample();
             if (!frame) {
               await new Promise((resolve) => setTimeout(resolve, 80));
               frame = await camera.sample();
             }
+            traceClient({stage:"capture-end",turn:diagnosticTurn.current,durationMs:Math.round(performance.now()-started)});
             if (!frame) return null;
+            const encoding=performance.now();traceClient({stage:"image-encode-start",turn:diagnosticTurn.current});
+            const frames=await encodeCameraFrames(camera.recent());
+            traceClient({stage:"image-encode-end",turn:diagnosticTurn.current,durationMs:Math.round(performance.now()-encoding),count:frames.length});
             return {
-              frames: await encodeCameraFrames(camera.recent()),
+              frames,
               capturedAt: frame.at,
             };
           })().catch(() => null)
@@ -652,7 +666,7 @@ export function CompanionHome({
             ].slice(-20) as Message[];
           });
           if (selectedVoice === "none") {
-            if (aloud.current) speech.current?.push(delta);
+            if (aloud.current&&!isNeuralVoiceEnabled()) speech.current?.push(delta);
           } else if (selectedVoice === null) pendingDeviceText += delta;
         },
         () => {
@@ -666,13 +680,13 @@ export function CompanionHome({
           selectedVoice = mode;
           neuralReply.current = mode === "neural";
           if (mode === "neural") speech.current?.cancel();
-          else if (aloud.current && pendingDeviceText) speech.current?.push(pendingDeviceText);
+          else if (aloud.current && pendingDeviceText&&!isNeuralVoiceEnabled()) speech.current?.push(pendingDeviceText);
           pendingDeviceText = "";
           document.body.dataset.voiceMode = mode;
           setVoiceNote(
             mode === "neural"
               ? "Neural voice on · waiting for audio"
-              : "Device voice (neural unavailable)",
+              : isNeuralVoiceEnabled()?"Cloud voice unavailable. The reply is shown in the conversation.":"Device voice selected",
           );
         },
         (event) => {
@@ -693,9 +707,9 @@ export function CompanionHome({
                 : `Neural voice · sentence ${event.seq + 1}`,
             );
           } else {
-            if (voiceInput) recordVoice("device-fallback", {}, replyTurn);
+            if (voiceInput) recordVoice("voice-unavailable", {}, replyTurn);
             voicePlayer.current?.audioError(event.text);
-            setVoiceNote(`Neural voice · device fallback (sentence ${event.seq + 1})`);
+            setVoiceNote("Cloud voice unavailable. The reply is shown in the conversation.");
           }
         },
         () => {
@@ -727,19 +741,21 @@ export function CompanionHome({
           ? [...items.slice(0, -1), final]
           : [...items, final].slice(-20);
       });
-      if (selectedVoice === null && !result.action && aloud.current && pendingDeviceText)
+      if (selectedVoice === null && !result.action && aloud.current && pendingDeviceText&&!isNeuralVoiceEnabled())
         speech.current?.push(pendingDeviceText);
       if(result.action){
         request.current=null;lock.current=false;setBusy(false);
         setConversationOpen(false);setSettingsOpen(false);taskQuestion.current=text;
-        if(aloud.current&&!streamed&&!neuralReply.current){speech.current?.push(actionMessage(result.action));speech.current?.finish();}
+        if(aloud.current&&!streamed&&!neuralReply.current)speakLocalReply(actionMessage(result.action));
         await taskRunner.current?.run(result.action,frames?.length?frames:image&&capturedAt?[{image,capturedAt}]:[]);
         return;
       }
       if (instructionsUrl) closeLink();
       if (aloud.current) {
-        if (!streamed && !neuralReply.current)
-          speech.current?.push(result.message);
+        if (!streamed && !neuralReply.current){
+          if(!isNeuralVoiceEnabled())speech.current?.push(result.message);
+          else if(selectedVoice===null)speakLocalReply(result.message);
+        }
         if (!neuralReply.current) speech.current?.finish();
       }
     } catch (error) {
@@ -1075,15 +1091,21 @@ export function CompanionHome({
     return pauseServer(clearVision);
   }
   function pauseServer(clearVision = false) {
-    const operation = api(
+    pauseRequest.current?.abort();const controller=new AbortController();pauseRequest.current=controller;
+    pauseUnconfirmed.current=true;
+    const operation = withRequestDeadline(signal=>api(
       clearVision ? "vision/stop" : "phase",
       clearVision ? {} : { phase: "paused" },
-    )
+      "POST",signal,
+    ),5000,controller.signal)
       .then((value) => {
+        if(controller.signal.aborted||pauseRequest.current!==controller)return;
+        pauseUnconfirmed.current=false;
         current.current = value as View;
         onView(value as View);
       })
       .catch(() => {
+        if(controller.signal.aborted||pauseRequest.current!==controller)return;
         mic.cancel();
         setProblem(
           "Couldn’t confirm the pause. Reconnect before trying again.",
@@ -1092,6 +1114,7 @@ export function CompanionHome({
     pause.current = operation;
     void operation.finally(() => {
       if (pause.current === operation) pause.current = null;
+      if(pauseRequest.current===controller)pauseRequest.current=null;
     });
     return operation;
   }
@@ -1308,6 +1331,9 @@ export function CompanionHome({
     return () => clearInterval(timer);
   }, [diagnosticsOn]);
   useEffect(() => {
+    return ()=>{pauseRequest.current?.abort();localVoiceRequest.current?.abort();};
+  },[]);
+  useEffect(() => {
     const hide = () => {
       if (document.visibilityState === "hidden") {
         cancel();
@@ -1326,6 +1352,7 @@ export function CompanionHome({
       camera.stop();
     }
   }, [view.key.connected, online, cancel, camera.stop]);
+  useEffect(()=>{if(view.key.connected&&!pause.current)pauseUnconfirmed.current=false;},[view.key.connected]);
   useEffect(() => {
     scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
   }, [messages, busy]);
@@ -1365,7 +1392,7 @@ export function CompanionHome({
   }
   async function newCallSession(){
     endSession();if(pause.current)await pause.current;
-    try{const fresh=await api("session/reset",{},"POST") as View;current.current=fresh;onView(fresh);setMessages([]);backgroundCalls.current=0;setBackgroundChecks(false);setEnded(false);setProblem("");}
+    try{const fresh=await withRequestDeadline(signal=>api("session/reset",{},"POST",signal),5000) as View;pauseUnconfirmed.current=false;current.current=fresh;onView(fresh);setMessages([]);backgroundCalls.current=0;setBackgroundChecks(false);setEnded(false);setProblem("");}
     catch(error){setProblem(error instanceof Error?error.message:"The new session could not start.");}
   }
   const toggleMic = () => {
@@ -1433,7 +1460,8 @@ export function CompanionHome({
       </header>
       {ended ? <div className="glint-ended">
         <Spark state="ready"/><p className="glint-eyebrow">UNTIL NEXT TIME</p><h1>Session ended.</h1><p>Your camera and microphone are off.</p>
-        <button className="glint-primary" onClick={() => { setEnded(false); setStarted(true); }}>Start again <ArrowUp className="glint-next" size={18}/></button>
+        {problem&&<p className="notice error" role="alert">{problem}</p>}
+        <button className="glint-primary" onClick={async() => { if(pauseUnconfirmed.current){await pauseServer(true);if(pauseUnconfirmed.current)return;}setEnded(false);setStarted(true);setProblem(""); }}>Start again <ArrowUp className="glint-next" size={18}/></button>
         {messages.length > 0 && <button className="glint-text" onClick={() => setConversationOpen(true)}>View conversation</button>}
       </div> : <>
         <div className="glint-workspace">
@@ -1469,7 +1497,7 @@ export function CompanionHome({
               {partial && <p className="glint-live-transcript" aria-live="polite">{partial}</p>}
               {subsOn && speaking && subtitle && !fullscreen && !conversationOpen && <p className="glint-live-transcript">{subtitle}</p>}
               {(busy || speaking) && <button className="glint-interrupt" onClick={() => void interrupt(false)}><Square size={13}/> Interrupt</button>}
-              {mic.enabled && voiceNote && <button className="glint-text glint-audio-note" onClick={() => { speech.current?.unlock(); voicePlayer.current?.unlock(); }}>{voiceNote}</button>}
+              {voiceNote && (voiceNote.startsWith("Cloud voice unavailable")?<p className="glint-audio-note" role="status">{voiceNote}</p>:mic.enabled&&<button className="glint-text glint-audio-note" onClick={() => { speech.current?.unlock(); voicePlayer.current?.unlock(); }}>{voiceNote}</button>)}
               {lookRequest&&!conversationOpen&&<button className="glint-text" onClick={()=>setConversationOpen(true)}>Open your look preview</button>}
               {problem && !conversationOpen && <div className="notice error" role="alert"><span>{problem}</span>{failed && <button className="glint-text" disabled={busy || !online} onClick={() => void send(failed.text, failed.url, failed.withImage && camera.active)}>Retry</button>}<button className="glint-round" aria-label="Dismiss conversation message" onClick={() => setProblem("")}><X size={17}/></button></div>}
             </div>
