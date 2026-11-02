@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: glint
+    runtime: node
+    branch: codex/livekit-prototype
+    plan: 0.5c-512mb
+    numInstances: 1
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    disk:
+      name: glint-data
+      mountPath: /var/data/glint
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: GLINT_DATA_DIR
+        value: /var/data/glint
+      - key: GLINT_TTS_PROVIDER
+        value: livekit
+      - key: GLINT_LIVEKIT_ENABLED
+        value: "0"
+      - key: GLINT_LIVEKIT_AGENT_ENABLED
+        value: "0"
+      - key: GLINT_LIVEKIT_TTS_MODEL
+        value: cartesia/sonic-3
+      - key: GLINT_LIVEKIT_TTS_VOICE
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false

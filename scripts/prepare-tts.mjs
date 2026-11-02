@@ -22,6 +22,10 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { URL } from "node:url";
 import https from "node:https";
+if(process.env.GLINT_TTS_PROVIDER==="livekit"){
+  console.log("tts: cloud voice selected; skipping local Kokoro model downloads");
+  process.exit(0);
+}
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = resolve(root, ".data", "tts");
 const base =

@@ -13,22 +13,20 @@ import { Store } from "./store.ts";
 import { MetaProvider } from "./provider.ts";
 import { getServerVoice } from "./tts-kokoro.ts";
 import dotenv from "dotenv";
+import {runtimeConfig} from "./runtime-config.ts";
 
 dotenv.config({path:[".env.local",".env"],quiet:true});
 
-const production = process.argv.includes("--production");
-const port = Number(process.env.PORT ?? 3100);
-const origin = process.env.APP_ORIGIN ?? `http://127.0.0.1:${port}`;
-if (production && !origin.startsWith("https://"))
-  throw new Error(
-    "Production mode requires an HTTPS APP_ORIGIN and a reviewed TLS proxy. Use npm run dev for local preview.",
-  );
+const {production,port,origin,host}=runtimeConfig();
 const engine = new Engine(
   new Store(resolve(process.env.GLINT_DATA_DIR ?? ".data", "glint.sqlite")),
   new MetaProvider(),
 );
 const app = createApp(engine, origin, production);
 const server = createServer(app);
+let draining=false;
+// Does not create a session, expose credentials or call an AI provider.
+app.get("/healthz",(_req,res)=>res.status(draining?503:200).set("Cache-Control","no-store").json({status:draining?"draining":"ok"}));
 if (!production) {
   const { createServer: vite } = await import("vite");
   const frontend = await vite({
@@ -62,7 +60,8 @@ const voice = new WebSocketServer({
   maxPayload: VOICE_WS_MAX_PAYLOAD,
 });
 server.on("upgrade", (req, socket, head) => {
-  if (req.url !== "/events" && req.url !== "/voice-stream") return;
+  if(draining){socket.destroy();return;}
+  if(req.url!=="/events"&&req.url!=="/voice-stream"){if(production)socket.destroy();return;}
   const session = engine.existing(cookieToken(req.headers.cookie));
   if (!session || req.headers.origin !== origin) {
     if (req.url === "/voice-stream")
@@ -99,9 +98,9 @@ server.on("upgrade", (req, socket, head) => {
 });
 const cleanup = setInterval(() => engine.cleanup(), 60000);
 cleanup.unref();
-server.listen(port, "127.0.0.1", () =>
+server.listen(port, host, () =>
   console.log(
-    `Glint local preview: ${origin} (local session auth; public deployment gated)`,
+    `Glint ready: ${origin} (${production?"production":"development"})`,
   ),
 );
 // Warm the neural voice beside startup so the first spoken reply skips the
@@ -111,10 +110,10 @@ void getServerVoice().then((voice) => {
 });
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => {
+    if(draining)return;draining=true;
     clearInterval(cleanup);
-    voice.close();
-    ws.close();
-    server.close();
-    engine.close();
-    process.exit(0);
+    for(const client of [...voice.clients,...ws.clients])client.terminate();
+    voice.close();ws.close();
+    const deadline=setTimeout(()=>{engine.close();process.exit(0);},10000);deadline.unref();
+    server.close(()=>{clearTimeout(deadline);engine.close();process.exit(0);});
   });
