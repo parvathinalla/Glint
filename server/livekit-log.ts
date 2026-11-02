@@ -10,7 +10,7 @@ export function safeLiveKitLog(line:string):string|null{
     const value=JSON.parse(own?line.slice(16):line) as Record<string,unknown>;
     if(own){
       const result:Record<string,unknown>={};
-      if(metricTypes.has(String(value.type))||["agent_state_changed","user_state_changed","worker_ready","worker_help"].includes(String(value.type)))result.type=value.type;
+      if(metricTypes.has(String(value.type))||["agent_state_changed","user_state_changed","worker_ready","worker_help","empty_reply"].includes(String(value.type)))result.type=value.type;
       else return null;
       for(const key of numericFields)if(typeof value[key]==="number"&&Number.isFinite(value[key]))result[key]=value[key];
       if(typeof value.cancelled==="boolean")result.cancelled=value.cancelled;

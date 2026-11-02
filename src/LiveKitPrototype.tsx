@@ -9,6 +9,7 @@ export default function LiveKitPrototype(){
   const [code,setCode]=useState(""),[state,setState]=useState("Not connected"),[problem,setProblem]=useState("");
   const [joining,setJoining]=useState(false),[connected,setConnected]=useState(false),[muted,setMuted]=useState(false);
   const [agent,setAgent]=useState("Waiting for agent"),[lines,setLines]=useState<LiveKitLine[]>([]);
+  const [models,setModels]=useState<{provider:string;llm:string;stt:string;tts:string}|null>(null);
   const room=useRef<Room|null>(null),attempt=useRef(0),controller=useRef<AbortController|null>(null),audio=useRef<HTMLDivElement>(null);
   const deadline=useRef<ReturnType<typeof setTimeout>|null>(null);
   const csrfRef=useRef("");csrfRef.current=csrf;
@@ -35,7 +36,7 @@ export default function LiveKitPrototype(){
   }
   async function join(){
     const version=++attempt.current;const abort=new AbortController();controller.current=abort;
-    setProblem("");setJoining(true);setState("Connecting");setLines([]);
+    setProblem("");setJoining(true);setState("Connecting");setLines([]);setModels(null);
     try{
       const response=await fetch("/api/livekit/token",{method:"POST",headers:{"Content-Type":"application/json","x-glint-csrf":csrf},body:JSON.stringify({accessCode:code}),signal:abort.signal});
       const result=await response.json();if(!response.ok)throw Error(result.message||"Could not join LiveKit.");
@@ -44,7 +45,13 @@ export default function LiveKitPrototype(){
       next.on(RoomEvent.TrackSubscribed,(track)=>{if(version!==attempt.current||track.kind!==Track.Kind.Audio)return;audio.current?.append(track.attach());});
       next.on(RoomEvent.TrackUnsubscribed,track=>track.detach().forEach(element=>element.remove()));
       next.on(RoomEvent.ConnectionStateChanged,value=>{if(version===attempt.current)setState(value);});
-      next.on(RoomEvent.ParticipantAttributesChanged,(_changed,participant)=>{if(version===attempt.current&&participant.attributes["lk.agent.state"])setAgent(participant.attributes["lk.agent.state"]);});
+      const attributesChanged=(_changed:Record<string,string>,participant:{attributes:Record<string,string>})=>{
+        if(version!==attempt.current)return;
+        const attributes=participant.attributes;
+        if(attributes["lk.agent.state"])setAgent(attributes["lk.agent.state"]);
+        if(attributes["glint.llm.model"])setModels({provider:attributes["glint.llm.provider"]||"configured provider",llm:attributes["glint.llm.model"],stt:attributes["glint.stt.model"]||"configured STT",tts:attributes["glint.tts.model"]||"configured TTS"});
+      };
+      next.on(RoomEvent.ParticipantAttributesChanged,attributesChanged);
       next.on(RoomEvent.Disconnected,()=>{if(version===attempt.current){setConnected(false);setMuted(false);setAgent("Waiting for agent");setState("Disconnected");audio.current?.replaceChildren();}});
       next.on(RoomEvent.ParticipantDisconnected,participant=>{
         if(version===attempt.current&&participant.attributes["lk.agent.state"]){setProblem("The voice agent disconnected. Join a new test session to continue.");void stop();}
@@ -62,6 +69,7 @@ export default function LiveKitPrototype(){
         }catch{if(version===attempt.current)setProblem("A transcript update was interrupted. Audio may continue.");}
       });
       await next.connect(result.serverUrl,result.participantToken);if(version!==attempt.current){await next.disconnect();return;}
+      next.remoteParticipants.forEach(participant=>attributesChanged({},participant));
       await next.startAudio().catch(()=>setProblem("Tap Enable speaker to allow audio playback."));
       await next.localParticipant.setMicrophoneEnabled(true);
       if(version!==attempt.current){await next.disconnect();return;}
@@ -72,6 +80,8 @@ export default function LiveKitPrototype(){
   }
   return <main className="livekit-prototype"><a href="/">← Return to Glint</a><h1>Glint LiveKit voice prototype</h1>
     <p>Compare the new voice connection with the existing Glint flow. Camera and image tools are not connected to this prototype yet. Each test session ends after five minutes; join again to continue.</p>
+    <p>This is a separate Glint voice agent. It does not run the main Glint camera/image task engine.</p>
+    {models&&<p>Conversation model: {models.llm} via {models.provider}. Speech recognition: {models.stt}. Voice: {models.tts}.</p>}
     <p>Joining sends microphone audio to LiveKit and the configured AI providers. Provider usage may incur charges. Transcripts below stay in this page; app recording is disabled.</p>
     {ready===false&&<p role="status">LiveKit is not configured. Follow docs/LIVEKIT_PROTOTYPE.md, then restart the app.</p>}
     {ready&&<><label>Prototype access code<input type="password" autoComplete="off" value={code} disabled={joining||connected} onChange={event=>setCode(event.target.value)}/></label>

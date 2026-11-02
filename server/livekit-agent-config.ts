@@ -10,6 +10,6 @@ export function livekitAgentConfig(env:NodeJS.ProcessEnv=process.env){
   const llmKey=provider==="baseten"?env.BASETEN_API_KEY:env.FIREWORKS_API_KEY;
   if(!llmKey)throw Error(`Configure the ${provider} API key in server secrets.`);
   return {...connection,stt:env.GLINT_LIVEKIT_STT_MODEL!,tts:env.GLINT_LIVEKIT_TTS_MODEL!,ttsVoice:env.GLINT_LIVEKIT_TTS_VOICE!,
-    llmModel:env.GLINT_LIVEKIT_LLM_MODEL!,llmKey,
+    llmProvider:provider,llmModel:env.GLINT_LIVEKIT_LLM_MODEL!,llmKey,
     llmURL:provider==="baseten"?"https://inference.baseten.co/v1":"https://api.fireworks.ai/inference/v1"};
 }

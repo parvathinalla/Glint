@@ -62,13 +62,13 @@ test("a joined room uses one audio element, supports microphone controls and dis
     export const RoomEvent={TrackSubscribed:'track',TrackUnsubscribed:'untrack',ConnectionStateChanged:'connection',ParticipantAttributesChanged:'attributes',TranscriptionReceived:'transcript',Disconnected:'disconnected'};
     export const Track={Kind:{Audio:'audio'}};
     export class Room {
-      handlers={}; localParticipant={identity:'tester',setMicrophoneEnabled:async value=>window.microphoneToggle(value)};
+      handlers={}; remoteParticipants=new Map(); localParticipant={identity:'tester',setMicrophoneEnabled:async value=>window.microphoneToggle(value)};
       on(name,handler){this.handlers[name]=handler;return this;}
       registerTextStreamHandler(_topic,callback){this.receive=callback;}
       async startAudio(){}
       async connect(){
         this.handlers.connection('connected');
-        this.handlers.attributes({}, {attributes:{'lk.agent.state':'listening'}});
+        this.handlers.attributes({}, {attributes:{'lk.agent.state':'listening','glint.llm.provider':'baseten','glint.llm.model':'meta-models/muse-spark-open-1026','glint.stt.model':'deepgram/nova-3','glint.tts.model':'cartesia/sonic-3'}});
         this.handlers.track({kind:'audio',attach:()=>document.createElement('audio')});
         this.handlers.transcript?.([{id:'legacy-one',text:'Ready for your test.'}],{isLocal:false});
         for (const [streamId,text,final] of [['interim-a','Ready',false],['interim-b','Ready for your test.',false],['final','Ready for your test.',true]]) {
@@ -81,6 +81,7 @@ test("a joined room uses one audio element, supports microphone controls and dis
   await page.goto("/livekit");await page.getByLabel("Prototype access code").fill("test-only-access");
   await page.getByRole("button",{name:"Join voice prototype"}).click();
   await expect(page.getByRole("button",{name:"Mute microphone"})).toBeVisible();
+  await expect(page.getByText(/Conversation model: meta-models\/muse-spark-open-1026 via baseten/)).toBeVisible();
   await expect(page.getByRole("log")).toContainText("Ready for your test.");await expect(page.getByRole("log").locator("p")).toHaveCount(1);await expect(page.locator("audio")).toHaveCount(1);
   await expect(page.getByLabel("Prototype access code")).toHaveValue("");
   await page.getByRole("button",{name:"Mute microphone"}).click();await expect(page.getByRole("button",{name:"Unmute microphone"})).toBeVisible();

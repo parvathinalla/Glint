@@ -139,6 +139,47 @@ returned HTTP 200 on its health endpoint and showed no further runner-init timeo
 events during the observed post-restart period. That observation does not establish
 production capacity or eliminate the remaining model/turn-detection latency.
 
+## Reasoning-budget and pause follow-up
+
+The next live test confirmed a completed (not canceled) Muse Spark request using
+600 completion tokens, 597 of them reasoning tokens, with no first visible token.
+Another reply took about 7.1 seconds to its first text token. Several other TTS
+outputs were canceled after new detected speech; those are distinct from empty
+model output and intentional background-speaker interruption tests.
+
+For BaseTen Muse Spark Open, the agent now explicitly requests low reasoning
+effort and allows 2048 completion tokens, including reasoning. The old 600-token
+cap could consume the entire budget before a useful spoken response. Other
+provider/model combinations do not receive an unverified reasoning parameter.
+The separate voice agent still uses the configured model; it is not the legacy
+Glint task engine. Its actual model, provider, STT and TTS are advertised through
+participant attributes and shown on the page after joining, without API secrets.
+
+The voice pipeline waits 1200 ms of end-of-turn silence instead of the previous
+500 ms default to accommodate natural within-sentence pauses. This adds up to
+700 ms to ordinary endpointing, so it is a deliberate turn-quality tradeoff,
+not a blanket latency reduction. Interruption handling remains enabled and does
+not perform speaker identification. The greeting is kept short.
+
+A normally completed stream with no visible answer now emits a short honest
+fallback instead of silence. Cancellation and provider errors propagate, and the
+fallback does not make another model call or expose hidden reasoning.
+
+Validation: 15 focused unit/integration tests passed, including a local HTTP test
+of the installed LiveKit adapter's actual `reasoning_effort: low` and
+`max_completion_tokens: 2048` payload, empty reply recovery, canceled streams and
+provider errors. Five browser scenarios passed, including model identification,
+transcript updates, mic controls, cleanup and production CSP. Build, TypeScript
+and lint passed.
+
+Two synthetic calls to the actual hackathon endpoint with the new settings
+completed with nonempty text and `finish_reason: stop`. First visible text was
+about 1.2 and 3.0 seconds; reasoning used 74 and 166 tokens. These are small model
+compatibility checks, not end-to-end voice or long-context benchmarks. They used
+provider inference; no user microphone/camera data was sent by those probes.
+
+Reference: https://docs.baseten.co/inference/model-apis/reasoning
+
 Automated checks use fake credentials and mocked API responses. They cover token
 scope, expiry, disabled mode, access checks, rate limits, cleanup retry and canceled
 joins without starting media. They do not qualify real WebRTC media or provider
