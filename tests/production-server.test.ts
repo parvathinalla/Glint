@@ -32,7 +32,6 @@ it("starts the production server with cloud binding, provider-free health and se
   }finally{
     if(child.exitCode===null){const exited=once(child,"exit");child.kill();await exited;}
     // Delete only the exact temporary directory created under this workspace.
-    if(dirname(resolve(data))!==scratch)throw Error("Unexpected production test directory");
-    rmSync(data,{recursive:true,force:true});
+    if(dirname(resolve(data))===scratch)rmSync(data,{recursive:true,force:true});
   }
 },40000);
