@@ -11,7 +11,7 @@ for(const theme of ["Light","Dark"] as const) {
     await expect(hero).toBeVisible();
     await expect.poll(()=>hero.evaluate(node=>(node as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(hero).toHaveAttribute("src","/avatars/glint-jelly-sky-champagne-v1.png");
-    await expect(page.locator(".glint-brand>img.jelly-star")).toBeVisible();
+    await expect(page.locator(".glint-brand>svg.spark-small")).toBeVisible();
     await expect(page.locator(".silver-star-canvas")).toHaveCount(0);
     const before=await hero.screenshot();
     await page.waitForTimeout(150);

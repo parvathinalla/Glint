@@ -1504,7 +1504,7 @@ export function CompanionHome({
           </div>
           {started && !fullscreen && <div className="glint-session-dock">{controls}</div>}
         </div>
-        <footer className="glint-attribution"><Sparkles size={13}/> Built with Meta models <span>See · Understand · Guide</span></footer>
+        <footer className="glint-attribution"><svg className="meta-mark" width="22" height="14" viewBox="0 0 32 20" aria-hidden="true"><path d="M16 10C12 3 10 2 7 2C3 2 1 8 1 13C1 17 3 18 5 18C9 18 12 12 16 6C19 2 21 2 24 2C28 2 31 8 31 13C31 17 29 18 27 18C23 18 20 13 16 7C13 3 10 2 7 2" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg> Built with Meta models <span>See · Understand · Guide</span></footer>
       </>}
       </div>
       {toolsEnabled&&<CameraTaskPanel task={cameraTask} onClose={()=>{setCameraTask(null);taskRunner.current?.dismissPending();}} onCancel={cancelCameraTask} onOpenCamera={openTaskCamera}/>}
