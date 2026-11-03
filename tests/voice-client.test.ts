@@ -5,7 +5,7 @@ import {
   isStreamingVoiceEnabled,
   type VoiceClientEvents,
   type VoiceClientSocket,
-} from "../src/voice-stream.ts";
+} from "../frontend/voice-stream.ts";
 
 class FakeSocket implements VoiceClientSocket {
   sent: (string | Uint8Array)[] = [];

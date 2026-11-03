@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { streamAgent } from "../src/agent-stream.ts";
+import { streamAgent } from "../frontend/agent-stream.ts";
 
 function sseResponse(body: string, chunk = 0): Response {
   if (!chunk)

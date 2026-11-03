@@ -2,11 +2,11 @@ import {afterEach,expect,it,vi} from "vitest";
 import {createServer,type Server} from "node:http";
 import {once} from "node:events";
 import {TokenVerifier} from "livekit-server-sdk";
-import {LiveKitSessions,livekitConfig,type LiveKitConfig} from "../server/livekit";
-import {livekitAgentConfig} from "../server/livekit-agent-config";
-import {createApp} from "../server/app";
-import {Engine} from "../server/engine";
-import {Store} from "../server/store";
+import {LiveKitSessions,livekitConfig,type LiveKitConfig} from "../backend/livekit";
+import {livekitAgentConfig} from "../backend/livekit-agent-config";
+import {createApp} from "../backend/app";
+import {Engine} from "../backend/engine";
+import {Store} from "../backend/store";
 
 const config:LiveKitConfig={url:"wss://test.livekit.cloud",apiKey:"test-key",apiSecret:"TEST_ONLY_SECRET_AT_LEAST_32_CHARACTERS",accessCode:"TEST_ONLY_ACCESS_CODE",agentName:"glint-prototype"};
 const env={GLINT_LIVEKIT_ENABLED:"1",LIVEKIT_URL:config.url,LIVEKIT_API_KEY:config.apiKey,LIVEKIT_API_SECRET:config.apiSecret,GLINT_LIVEKIT_ACCESS_CODE:config.accessCode};

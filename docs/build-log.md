@@ -77,12 +77,12 @@ Sessions and active work remain in process memory. Account authentication, durab
 
 ## Project layout
 
-- `src/`: responsive UI, original SVG art, camera lifecycle, local quality worker.
+- `frontend/`: responsive UI, original SVG art, camera lifecycle, local quality worker.
 - `shared/model.ts`: validated source/task types and original example.
-- `server/engine.ts`: source confirmation, prerequisites, key lease, dispatch bounds, freshness and cancellation.
-- `server/provider.ts`: allowlisted Meta model listing and image/text chat adapter; sanitized errors and validated decisions.
-- `server/store.ts`: local SQLite progress only, never credentials or media.
-- `server/app.ts`, `server/index.ts`: HTTP boundaries, private sessions, persistent status connection and environment-aware launch.
+- `backend/engine.ts`: source confirmation, prerequisites, key lease, dispatch bounds, freshness and cancellation.
+- `backend/provider.ts`: allowlisted Meta model listing and image/text chat adapter; sanitized errors and validated decisions.
+- `backend/store.ts`: local SQLite progress only, never credentials or media.
+- `backend/app.ts`, `backend/index.ts`: HTTP boundaries, private sessions, persistent status connection and environment-aware launch.
 - `docs/`: standalone design/architecture/plan, provider references, implementation status, and tests.
 
 The standalone design documents and original Glint concept assets are in `docs/`.
@@ -117,7 +117,7 @@ Reconnect the key to continue. This does not reset provider credits or charges.
 
 ## Diagnostic trace
 
-Automatic structured tracing links browser requests to server/provider calls using
+Automatic structured tracing links browser requests to backend/provider calls using
 random request IDs. It records speech stages, queue decisions, task states, camera
 capture/encoding boundaries, stream completion, cancellations, elapsed time,
 HTTP status and call usage. It excludes transcript/reply/prompt text, request

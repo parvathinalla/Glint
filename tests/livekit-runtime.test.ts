@@ -1,8 +1,8 @@
 import {expect,it} from "vitest";
-import {updateLiveKitTranscript,type LiveKitLine} from "../src/livekit-transcripts";
-import {safeLiveKitLog} from "../server/livekit-log";
-import {livekitMetric} from "../server/livekit-telemetry";
-import {livekitWorkerOptions} from "../server/livekit-worker-options";
+import {updateLiveKitTranscript,type LiveKitLine} from "../frontend/livekit-transcripts";
+import {safeLiveKitLog} from "../backend/livekit-log";
+import {livekitMetric} from "../backend/livekit-telemetry";
+import {livekitWorkerOptions} from "../backend/livekit-worker-options";
 
 it("replaces interim segments and prevents older streams from overwriting a final turn",()=>{
   const partial:LiveKitLine={id:"tester:one",who:"You",text:"Which rides",final:false,revision:1};

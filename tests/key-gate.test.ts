@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadKeyGateDismissed, saveKeyGateDismissed } from "../src/key-gate.ts";
+import { loadKeyGateDismissed, saveKeyGateDismissed } from "../frontend/key-gate.ts";
 
 describe("key gate dismissal", () => {
   afterEach(() => vi.unstubAllGlobals());

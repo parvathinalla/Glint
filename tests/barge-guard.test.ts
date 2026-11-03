@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BargeGuard, ECHO_BARGE_GRACE_MS } from "../src/barge-guard.ts";
+import { BargeGuard, ECHO_BARGE_GRACE_MS } from "../frontend/barge-guard.ts";
 
 describe("barge-in echo guard", () => {
   it("passes turns when nothing was spoken yet", () => {

@@ -3,7 +3,7 @@ import {
   serializeVoice,
   type GlintVoice,
   type VoiceSample,
-} from "../server/tts.ts";
+} from "../backend/tts.ts";
 
 it("gives queued sentences their full generation budget", async () => {
   vi.useFakeTimers();

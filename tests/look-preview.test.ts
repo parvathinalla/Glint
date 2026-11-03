@@ -1,10 +1,10 @@
 import { afterEach, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { ImageProvider } from "../server/image-provider";
-import { Engine } from "../server/engine";
-import { AgentProvider } from "../server/agent-provider";
-import { SamProvider } from "../server/sam-provider";
-import { Store } from "../server/store";
+import { ImageProvider } from "../backend/image-provider";
+import { Engine } from "../backend/engine";
+import { AgentProvider } from "../backend/agent-provider";
+import { SamProvider } from "../backend/sam-provider";
+import { Store } from "../backend/store";
 import { lookPreviewInput, wantsLookPreview,lookFollowup } from "../shared/look-preview";
 const png="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=";
 const engines:Engine[]=[];

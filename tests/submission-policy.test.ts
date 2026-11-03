@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {submissionEnvironment} from "../server/submission-policy.ts";
+import {submissionEnvironment} from "../backend/submission-policy.ts";
 
 it("explicit submission profile disables cloud speech, mocks and comparison agents despite inherited settings",()=>{
   const original={GLINT_NEURAL_VOICE:"1",GLINT_TTS_MOCK:"1",GLINT_LIVEKIT_ENABLED:"1",GLINT_LIVEKIT_AGENT_ENABLED:"1",PORT:"3100"};

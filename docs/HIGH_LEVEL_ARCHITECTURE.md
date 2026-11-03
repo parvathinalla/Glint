@@ -39,19 +39,19 @@ The public test URL uses a Cloudflare tunnel to the laptop-hosted process. It is
 
 | Boundary | Responsibility | Sources |
 | --- | --- | --- |
-| Browser entry | Main app at `/`; lazy-loaded comparison app at `/livekit` | `src/main.tsx` |
-| Application shell | Session bootstrap, connection status, key dialog, workspace/task UI | `src/App.tsx` |
-| Companion orchestration | Conversation, voice lifecycle, camera context, tool results, interruption and settings | `src/CompanionHome.tsx` |
-| Media input | Camera permissions, bounded stills, MP4 clips; microphone AudioWorklet, VAD and WAV recovery | `src/camera.ts`, `src/microphone.ts`, `src/ml-vad.ts`, `public/voice-capture.js` |
-| Local visual events | Optional pose-based visual signals, separate from SAM segmentation | `src/visual-awareness.ts`, `public/vision-observer.js` |
-| Browser action execution | Validates tool actions, captures evidence, coordinates jobs and one-shot checks | `src/camera-task-runner.ts` |
-| Browser speech output | Ordered PCM playback, interruption, explicit device voice | `src/voice-player.ts`, `src/speech-queue.ts` |
-| HTTP boundary | Schemas, cookie session, origin/CSRF checks, routes, response streams | `server/app.ts` |
-| Runtime | Environment loading, static/Vite serving, WebSocket upgrades, health and shutdown | `server/index.ts`, `server/runtime-config.ts` |
-| Session engine | In-memory sessions and keys, provider-call allowance, request deduplication, history and cancellation | `server/engine.ts` |
-| Provider adapters | Meta conversation, transcription, image generation, SAM and condition evaluation | `server/agent-provider.ts`, `server/asr-provider.ts`, `server/image-provider.ts`, `server/sam-provider.ts`, `server/condition-provider.ts` |
-| Existing checkpoint workflow | Source/task coaching and validated step decisions; separate from the companion tool coordinator | `server/provider.ts`, `shared/model.ts` |
-| Speech synthesis | Provider selection, sentence FIFO, incremental cloud PCM | `server/tts-kokoro.ts`, `server/tts-stream.ts`, `server/tts-livekit.ts` |
+| Browser entry | Main app at `/`; lazy-loaded comparison app at `/livekit` | `frontend/main.tsx` |
+| Application shell | Session bootstrap, connection status, key dialog, workspace/task UI | `frontend/App.tsx` |
+| Companion orchestration | Conversation, voice lifecycle, camera context, tool results, interruption and settings | `frontend/CompanionHome.tsx` |
+| Media input | Camera permissions, bounded stills, MP4 clips; microphone AudioWorklet, VAD and WAV recovery | `frontend/camera.ts`, `frontend/microphone.ts`, `frontend/ml-vad.ts`, `public/voice-capture.js` |
+| Local visual events | Optional pose-based visual signals, separate from SAM segmentation | `frontend/visual-awareness.ts`, `public/vision-observer.js` |
+| Browser action execution | Validates tool actions, captures evidence, coordinates jobs and one-shot checks | `frontend/camera-task-runner.ts` |
+| Browser speech output | Ordered PCM playback, interruption, explicit device voice | `frontend/voice-player.ts`, `frontend/speech-queue.ts` |
+| HTTP boundary | Schemas, cookie session, origin/CSRF checks, routes, response streams | `backend/app.ts` |
+| Runtime | Environment loading, static/Vite serving, WebSocket upgrades, health and shutdown | `backend/index.ts`, `backend/runtime-config.ts` |
+| Session engine | In-memory sessions and keys, provider-call allowance, request deduplication, history and cancellation | `backend/engine.ts` |
+| Provider adapters | Meta conversation, transcription, image generation, SAM and condition evaluation | `backend/agent-provider.ts`, `backend/asr-provider.ts`, `backend/image-provider.ts`, `backend/sam-provider.ts`, `backend/condition-provider.ts` |
+| Existing checkpoint workflow | Source/task coaching and validated step decisions; separate from the companion tool coordinator | `backend/provider.ts`, `shared/model.ts` |
+| Speech synthesis | Provider selection, sentence FIFO, incremental cloud PCM | `backend/tts-kokoro.ts`, `backend/tts-stream.ts`, `backend/tts-livekit.ts` |
 | Shared contracts | Validated request/result types, tool definitions, evidence bounds and diagnostic schemas | `shared/` |
 
 ## Conversation and voice sequence
@@ -113,7 +113,7 @@ Origin checks, CSRF validation, HttpOnly/SameSite cookies, production HTTPS orig
 
 `LiveKitPrototype` obtains a restricted, short-lived room token from the same backend, guarded by an access code. A separate agent worker connects to LiveKit Cloud and composes configured STT, an OpenAI-compatible LLM adapter and TTS. The agent identifies itself as voice-only and has no main Glint camera/image/search tools. It has a five-minute prototype limit. Its environment-configured model key is distinct from the main browser BYOK flow.
 
-Sources: `server/livekit.ts`, `server/livekit-agent.ts`, `server/livekit-agent-config.ts`, `src/LiveKitPrototype.tsx`.
+Sources: `backend/livekit.ts`, `backend/livekit-agent.ts`, `backend/livekit-agent-config.ts`, `frontend/LiveKitPrototype.tsx`.
 
 ## Architecture follow-ups identified by review
 

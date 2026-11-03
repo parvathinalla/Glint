@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {AgentProvider} from "../server/agent-provider";
+import {AgentProvider} from "../backend/agent-provider";
 const capabilities={camera:true,tracking:true,lastImage:false};
 const edit={type:"function_call",status:"completed",call_id:"call-1",name:"edit_camera_image",arguments:JSON.stringify({prompt:"Fairy makeup",source:"camera"})};
 it.each([false,true])("streams early text only when camera actions are disabled: tools=%s",async tools=>{

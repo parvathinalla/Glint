@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from "vitest";
-import {CameraTaskRunner,type TaskDependencies,type CameraTaskEvent} from "../src/camera-task-runner";
+import {CameraTaskRunner,type TaskDependencies,type CameraTaskEvent} from "../frontend/camera-task-runner";
 import {parseCameraAction} from "../shared/camera-tools";
 const photo="data:image/jpeg;base64,/9j/2Q==",generated="data:image/png;base64,YQ==";
 afterEach(()=>vi.useRealTimers());

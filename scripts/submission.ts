@@ -1,5 +1,5 @@
 import {spawn} from "node:child_process";
-import {submissionEnvironment} from "../server/submission-policy.ts";
+import {submissionEnvironment} from "../backend/submission-policy.ts";
 
 const command=process.argv[2];
 if(!["dev","build","start"].includes(command))throw Error("Choose dev, build or start.");

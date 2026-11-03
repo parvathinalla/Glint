@@ -211,7 +211,7 @@ export function createApp(engine: Engine, origin: string, production = false, li
       path
         .split("/")
         .some((part) =>
-          /^(?:\.data|\.git|server|tests)$|^\.env(?:\.|$)|\.sqlite(?:-|$)/i.test(
+          /^(?:\.data|\.git|server|backend|tests)$|^\.env(?:\.|$)|\.sqlite(?:-|$)/i.test(
             part,
           ),
         )

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { MockVoice, type GlintVoice } from "../server/tts.ts";
-import { TtsStream, type TtsEvent } from "../server/tts-stream.ts";
+import { MockVoice, type GlintVoice } from "../backend/tts.ts";
+import { TtsStream, type TtsEvent } from "../backend/tts-stream.ts";
 
 class ScriptedVoice implements GlintVoice {
   name = "scripted";

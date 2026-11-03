@@ -132,7 +132,7 @@ or provider inference is triggered merely by building the frontend.
   fields and unstructured text are not forwarded into the new launcher logs.
   Historical logs from the earlier launcher may contain conversation text; they
   are private ignored files and have not been rewritten by this change.
-- Do not invoke `server/livekit-worker.ts` directly for normal runs: that bypasses
+- Do not invoke `backend/livekit-worker.ts` directly for normal runs: that bypasses
   the output filter. Both the runner and worker PID are recorded privately in
   `.data/livekit/runtime.json` for controlled shutdown.
 - The worker uses the SDK server API directly. SDK 1.9.5's CLI overrides log-level

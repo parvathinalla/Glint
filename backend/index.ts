@@ -40,7 +40,7 @@ if (!production) {
           ".env.*",
           "**/.data/**",
           "**/*.sqlite*",
-          "**/server/**",
+          "**/backend/**",
           "**/tests/**",
           "**/.git/**",
           "*.{crt,pem}",

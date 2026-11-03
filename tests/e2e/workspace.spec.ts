@@ -27,6 +27,6 @@ test("phone layout stays within viewport with reduced motion",async({page})=>{
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test("private application resources are not publicly served",async({request})=>{
-  for(const path of ["/.data/glint.sqlite","/server/engine.ts","/.env.local"])
+  for(const path of ["/.data/glint.sqlite","/backend/engine.ts","/.env.local"])
     expect((await request.get(path)).status()).toBe(403);
 });

@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {runtimeConfig} from "../server/runtime-config";
+import {runtimeConfig} from "../backend/runtime-config";
 it("keeps development local and binds cloud production to the provider port on all interfaces",()=>{
   expect(runtimeConfig({},[])).toEqual({production:false,host:"127.0.0.1",port:3100,origin:"http://127.0.0.1:3100"});
   expect(runtimeConfig({NODE_ENV:"production",PORT:"10000",RENDER_EXTERNAL_URL:"https://glint.onrender.com/"},[])).toEqual({production:true,host:"0.0.0.0",port:10000,origin:"https://glint.onrender.com"});

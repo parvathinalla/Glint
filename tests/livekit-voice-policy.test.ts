@@ -4,7 +4,7 @@ import {createServer,type Server} from "node:http";
 import {once} from "node:events";
 import {ChatContext,initializeLogger} from "@livekit/agents";
 import {LLM} from "@livekit/agents-plugin-openai";
-import {audibleReply,livekitVoicePolicy} from "../server/livekit-voice-policy";
+import {audibleReply,livekitVoicePolicy} from "../backend/livekit-voice-policy";
 
 async function collect<T>(stream:ReadableStream<T>){const items:T[]=[];for await(const item of stream)items.push(item);return items;}
 

@@ -1,14 +1,14 @@
-import * as voiceRuntime from "../server/tts-kokoro";
+import * as voiceRuntime from "../backend/tts-kokoro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { createApp } from "../server/app.ts";
-import { Engine } from "../server/engine.ts";
-import { Store } from "../server/store.ts";
-import type { Provider } from "../server/provider.ts";
+import { createApp } from "../backend/app.ts";
+import { Engine } from "../backend/engine.ts";
+import { Store } from "../backend/store.ts";
+import type { Provider } from "../backend/provider.ts";
 import type { View } from "../shared/model.ts";
-import { AgentProvider } from "../server/agent-provider.ts";
+import { AgentProvider } from "../backend/agent-provider.ts";
 const origin = "http://127.0.0.1:3100";
 let server: Server, engine: Engine;
 async function fixture(provider?: Provider, agent?: AgentProvider) {

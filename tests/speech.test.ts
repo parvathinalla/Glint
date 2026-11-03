@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { SpeechQueue } from "../src/speech-queue.ts";
+import { SpeechQueue } from "../frontend/speech-queue.ts";
 import { NaturalReplyStream, naturalReply } from "../shared/natural-reply.ts";
 afterEach(() => vi.unstubAllGlobals());
 it("reports browser playback only on utterance start, ignoring canceled callbacks", () => {

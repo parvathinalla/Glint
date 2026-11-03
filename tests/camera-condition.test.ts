@@ -1,11 +1,11 @@
 import {afterEach,expect,it} from "vitest";
 import {randomUUID} from "node:crypto";
-import {ConditionProvider} from "../server/condition-provider";
-import {Engine} from "../server/engine";
-import {Store} from "../server/store";
-import {AgentProvider} from "../server/agent-provider";
-import {SamProvider} from "../server/sam-provider";
-import {ImageProvider} from "../server/image-provider";
+import {ConditionProvider} from "../backend/condition-provider";
+import {Engine} from "../backend/engine";
+import {Store} from "../backend/store";
+import {AgentProvider} from "../backend/agent-provider";
+import {SamProvider} from "../backend/sam-provider";
+import {ImageProvider} from "../backend/image-provider";
 const engines:Engine[]=[];afterEach(()=>engines.splice(0).forEach(engine=>engine.close()));
 const envelope=(verdict:string)=>({status:"completed",output:[{type:"message",content:[{type:"output_text",text:JSON.stringify({verdict,summary:"The lamp is occluded."})}]}]});
 it("requests one evidence-based structured verdict without tools or persistence",async()=>{

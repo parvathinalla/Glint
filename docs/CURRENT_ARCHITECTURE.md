@@ -10,21 +10,21 @@ Source review: 3 November 2026. Historical diagrams may show earlier voice backe
 
 | Task | Implemented tool | Main source |
 | --- | --- | --- |
-| Companion UI | React 19, TypeScript, CSS, video/canvas star avatar with jelly-image fallback; Lucide icons | `src/App.tsx`, `src/CompanionHome.tsx`, `src/SilverStar.tsx` |
-| Camera preview and recent visual evidence | getUserMedia, Canvas JPEG encoding, bounded ring buffer, quality Web Worker | `src/camera.ts`, `src/quality.worker.ts`, `shared/buffer.ts` |
-| Local person / hand-rise events | MediaPipe Pose Landmarker in a Web Worker | `src/visual-awareness.ts`, `public/vision-observer.js`, `shared/visual-events.ts` |
-| Optional recorded object movement | SAM 3.1, official Meta SAM parser, normalized per-frame box centers; experimental two-second clips | `server/sam-provider.ts`, `shared/object-motion.ts`, `docs/OBJECT_TRACKING.md` |
-| Speech capture and turn detection | Web Audio, AudioWorklet, Silero VAD using ONNX Runtime Web/WASM, energy detection | `src/microphone.ts`, `src/ml-vad.ts`, `public/voice-capture.js`, `shared/voice-turn.ts` |
-| Streaming speech recognition | Browser WebSocket to local server; server `ws` adapter to Meta Muse Voice Transcribe `/asr/realtime` | `src/voice-stream.ts`, `server/asr-provider.ts`, `server/app.ts` |
-| Utterance fallback recognition | Bounded WAV upload to Meta `/asr/transcribe` | `server/agent-provider.ts` |
-| Conversation and camera understanding | Muse Spark through Meta `/responses`; text deltas streamed when applicable | `server/agent-provider.ts`, `server/engine.ts` |
-| Optional manual-link research | Meta Responses built-in `web_search`, with returned citations | `server/agent-provider.ts` |
-| Illustrated checkpoint coaching | Task prerequisites and validated decisions; Meta `/chat/completions`; explicit no-key demo replay | `shared/model.ts`, `server/provider.ts`, `server/engine.ts` |
-| Generated speech | LiveKit Inference streaming PCM; optional local Kokoro backend | `server/tts-livekit.ts`, `server/tts-kokoro.ts`, `server/tts-stream.ts` |
-| Reply playback and interruption | Web Audio PCM playback, explicit device `speechSynthesis` option, echo/barge guards | `src/voice-player.ts`, `src/speech-queue.ts`, `src/echo.ts`, `src/barge-guard.ts` |
-| HTTP and session boundary | Node 24, Express 5, Helmet, Zod, private cookies, origin/CSRF checks | `server/index.ts`, `server/app.ts` |
-| Coordination and cancellation | In-memory session engine, request IDs, epochs, freshness checks, bounded dispatch | `server/engine.ts`, `shared/agent.ts` |
-| Optional saved task progress | Node built-in SQLite, seven-day expiry | `server/store.ts` |
+| Companion UI | React 19, TypeScript, CSS, video/canvas star avatar with jelly-image fallback; Lucide icons | `frontend/App.tsx`, `frontend/CompanionHome.tsx`, `frontend/SilverStar.tsx` |
+| Camera preview and recent visual evidence | getUserMedia, Canvas JPEG encoding, bounded ring buffer, quality Web Worker | `frontend/camera.ts`, `frontend/quality.worker.ts`, `shared/buffer.ts` |
+| Local person / hand-rise events | MediaPipe Pose Landmarker in a Web Worker | `frontend/visual-awareness.ts`, `public/vision-observer.js`, `shared/visual-events.ts` |
+| Optional recorded object movement | SAM 3.1, official Meta SAM parser, normalized per-frame box centers; experimental two-second clips | `backend/sam-provider.ts`, `shared/object-motion.ts`, `docs/OBJECT_TRACKING.md` |
+| Speech capture and turn detection | Web Audio, AudioWorklet, Silero VAD using ONNX Runtime Web/WASM, energy detection | `frontend/microphone.ts`, `frontend/ml-vad.ts`, `public/voice-capture.js`, `shared/voice-turn.ts` |
+| Streaming speech recognition | Browser WebSocket to local server; server `ws` adapter to Meta Muse Voice Transcribe `/asr/realtime` | `frontend/voice-stream.ts`, `backend/asr-provider.ts`, `backend/app.ts` |
+| Utterance fallback recognition | Bounded WAV upload to Meta `/asr/transcribe` | `backend/agent-provider.ts` |
+| Conversation and camera understanding | Muse Spark through Meta `/responses`; text deltas streamed when applicable | `backend/agent-provider.ts`, `backend/engine.ts` |
+| Optional manual-link research | Meta Responses built-in `web_search`, with returned citations | `backend/agent-provider.ts` |
+| Illustrated checkpoint coaching | Task prerequisites and validated decisions; Meta `/chat/completions`; explicit no-key demo replay | `shared/model.ts`, `backend/provider.ts`, `backend/engine.ts` |
+| Generated speech | LiveKit Inference streaming PCM; optional local Kokoro backend | `backend/tts-livekit.ts`, `backend/tts-kokoro.ts`, `backend/tts-stream.ts` |
+| Reply playback and interruption | Web Audio PCM playback, explicit device `speechSynthesis` option, echo/barge guards | `frontend/voice-player.ts`, `frontend/speech-queue.ts`, `frontend/echo.ts`, `frontend/barge-guard.ts` |
+| HTTP and session boundary | Node 24, Express 5, Helmet, Zod, private cookies, origin/CSRF checks | `backend/index.ts`, `backend/app.ts` |
+| Coordination and cancellation | In-memory session engine, request IDs, epochs, freshness checks, bounded dispatch | `backend/engine.ts`, `shared/agent.ts` |
+| Optional saved task progress | Node built-in SQLite, seven-day expiry | `backend/store.ts` |
 | Build and development | npm, Vite, tsx, TypeScript, ESLint | `package.json`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js` |
 | Automated verification | Vitest, Playwright/Chromium, axe-core accessibility, synthetic media/provider fixtures | `tests/`, `vitest.config.ts`, `playwright.config.ts` |
 | Local model preparation | Pinned model/runtime preparation scripts; downloaded local model assets | `scripts/prepare-*.mjs`, `public/vision/`, `public/vad/` |

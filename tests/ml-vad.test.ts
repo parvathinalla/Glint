@@ -5,7 +5,7 @@ import {
   isMlVadEnabled,
   type VadFeed,
   type VadSession,
-} from "../src/ml-vad.ts";
+} from "../frontend/ml-vad.ts";
 afterEach(() => vi.unstubAllGlobals());
 describe("ML VAD kill switch", () => {
   it("is on unless localStorage disables it", () => {

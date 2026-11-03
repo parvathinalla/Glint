@@ -4,7 +4,7 @@ vi.mock("@livekit/agents",()=>({initializeLogger:vi.fn(),inference:{TTS:class{
   stream(){return {pushText(){},endInput(){},close(){state.closed++;},async *[Symbol.asyncIterator](){state.frames++;yield {frame:{sampleRate:24000,channels:1,data:new Int16Array([0,16384,-32768])}};}};}
   async close(){state.closed++;}
 }}}));
-import {createLiveKitVoice} from "../server/tts-livekit.ts";
+import {createLiveKitVoice} from "../backend/tts-livekit.ts";
 const env={GLINT_LIVEKIT_TTS_MODEL:"cartesia/sonic-3",GLINT_LIVEKIT_TTS_VOICE:"test",LIVEKIT_API_KEY:"test",LIVEKIT_API_SECRET:"test"};
 it("converts cloud PCM and releases the stream while keeping pooled connections reusable",async()=>{
   state.closed=0;const sample=await createLiveKitVoice(env).synth("Hello");

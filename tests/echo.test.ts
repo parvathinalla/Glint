@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isEchoTranscript } from "../src/echo.ts";
+import { isEchoTranscript } from "../frontend/echo.ts";
 
 describe("echo transcript detection", () => {
   const glint = [

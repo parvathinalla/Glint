@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { WebSocket, WebSocketServer } from "ws";
-import { Engine } from "../server/engine.ts";
-import { Store } from "../server/store.ts";
-import type { Provider } from "../server/provider.ts";
-import { handleVoiceSocket, type VoiceSocket } from "../server/app.ts";
+import { Engine } from "../backend/engine.ts";
+import { Store } from "../backend/store.ts";
+import type { Provider } from "../backend/provider.ts";
+import { handleVoiceSocket, type VoiceSocket } from "../backend/app.ts";
 
 const providers: Provider = {
   models: async () => ["muse-spark-test"],

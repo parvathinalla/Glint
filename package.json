@@ -7,9 +7,9 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "tsx server/index.ts",
+    "dev": "tsx backend/index.ts",
     "build": "npm run typecheck && vite build",
-    "start": "tsx server/index.ts --production",
+    "start": "tsx backend/index.ts --production",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -17,8 +17,8 @@
     "postinstall": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-tts.mjs",
     "predev": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-tts.mjs",
     "prebuild": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-tts.mjs",
-    "livekit:agent": "tsx server/livekit-runner.ts",
-    "livekit:download": "tsx server/livekit-runner.ts download-files",
+    "livekit:agent": "tsx backend/livekit-runner.ts",
+    "livekit:download": "tsx backend/livekit-runner.ts download-files",
     "dev:submission": "tsx scripts/submission.ts dev",
     "build:submission": "tsx scripts/submission.ts build",
     "start:submission": "tsx scripts/submission.ts start",

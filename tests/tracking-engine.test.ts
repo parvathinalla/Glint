@@ -1,9 +1,9 @@
 import { afterEach,expect,it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { Engine } from "../server/engine.ts";
-import { Store } from "../server/store.ts";
-import { SamProvider } from "../server/sam-provider.ts";
-import { AgentProvider } from "../server/agent-provider.ts";
+import { Engine } from "../backend/engine.ts";
+import { Store } from "../backend/store.ts";
+import { SamProvider } from "../backend/sam-provider.ts";
+import { AgentProvider } from "../backend/agent-provider.ts";
 import { summarizeMotion,type TrackInput } from "../shared/object-motion.ts";
 const now=1700000000000,engines:Engine[]=[];
 afterEach(()=>engines.splice(0).forEach(engine=>engine.close()));

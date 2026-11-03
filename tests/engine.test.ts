@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Engine, type Session } from "../server/engine.ts";
-import { Store } from "../server/store.ts";
-import { MetaProvider, type Provider } from "../server/provider.ts";
+import { Engine, type Session } from "../backend/engine.ts";
+import { Store } from "../backend/store.ts";
+import { MetaProvider, type Provider } from "../backend/provider.ts";
 import { demoInput, type Decision } from "../shared/model.ts";
 
 const decision: Decision = {

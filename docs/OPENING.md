@@ -28,12 +28,12 @@ The intro runs once per full document load, including a deliberate refresh. It d
 
 ## Implementation and evidence
 
-- `src/Opening.tsx`: phase sequence, accessibility, cleanup, and separate front-facing beat.
-- `src/OpeningCharacter.tsx`: unified SVG shell, inset facial poses, original leg/shoe artwork, requestAnimationFrame gait, ground-contact compensation, and stable turn.
-- `src/opening.css`: face transitions, viewport-level bloom, and reveal.
-- `src/Art.tsx`: matching rounder shared avatar from the preceding redesign; unchanged in the anatomy correction.
-- `src/main.tsx`: wraps the existing app without changing its lifecycle.
-- `src/App.tsx`: main content can receive focus after reveal.
+- `frontend/Opening.tsx`: phase sequence, accessibility, cleanup, and separate front-facing beat.
+- `frontend/OpeningCharacter.tsx`: unified SVG shell, inset facial poses, original leg/shoe artwork, requestAnimationFrame gait, ground-contact compensation, and stable turn.
+- `frontend/opening.css`: face transitions, viewport-level bloom, and reveal.
+- `frontend/Art.tsx`: matching rounder shared avatar from the preceding redesign; unchanged in the anatomy correction.
+- `frontend/main.tsx`: wraps the existing app without changing its lifecycle.
+- `frontend/App.tsx`: main content can receive focus after reveal.
 - `tests/e2e/opening.spec.ts`: ordering, hidden/inert site, fresh-load policy, no media/paid actions, desktop/mobile overflow, reduced motion, keyboard skip, screenshots, and a browser recording.
 - Existing workspace tests explicitly wait for the intro to finish.
 

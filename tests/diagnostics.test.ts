@@ -1,6 +1,6 @@
 import {expect,it,vi} from "vitest";
 import {DiagnosticBuffer,diagnosticOperation} from "../shared/diagnostics";
-import {acceptClientTrace,sessionDiagnostics,traceServer} from "../server/diagnostics";
+import {acceptClientTrace,sessionDiagnostics,traceServer} from "../backend/diagnostics";
 
 it("rejects content and arbitrary labels before storing or emitting diagnostics",()=>{
   const log=new DiagnosticBuffer(()=>100);

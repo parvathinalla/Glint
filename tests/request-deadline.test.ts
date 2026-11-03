@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from "vitest";
-import {withRequestDeadline} from "../src/request-deadline";
+import {withRequestDeadline} from "../frontend/request-deadline";
 afterEach(()=>vi.useRealTimers());
 it("aborts a hung request and bounds a transport that ignores cancellation",async()=>{
   vi.useFakeTimers();let signal!:AbortSignal;let release!:(value:string)=>void;

@@ -12,7 +12,7 @@ Microphone audio streams from the browser through the local Node/Express server 
 
 Camera observations run separately at the browser level, yielding to voice work. Up to six frames from eight seconds go to Muse for recent visual context. The engine uses temporary conversation and visual memory; optional task progress uses SQLite. There is no persistent task-object tracker or managed account authentication.
 
-Current implementation references: `src/CompanionHome.tsx`, `src/camera.ts`, `src/voice-stream.ts`, `server/app.ts`, `server/asr-provider.ts`, `server/engine.ts`, `server/tts-stream.ts`, `server/tts-kokoro.ts`, `server/store.ts`.
+Current implementation references: `frontend/CompanionHome.tsx`, `frontend/camera.ts`, `frontend/voice-stream.ts`, `backend/app.ts`, `backend/asr-provider.ts`, `backend/engine.ts`, `backend/tts-stream.ts`, `backend/tts-kokoro.ts`, `backend/store.ts`.
 
 ## Production target
 

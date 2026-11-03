@@ -68,7 +68,7 @@ try {
   $env:APP_ORIGIN = $runtime.url
   $env:PORT = [string]$Port
   $nodePath = (Get-Command node.exe -ErrorAction Stop).Source
-  $server = Start-Process -FilePath $nodePath -ArgumentList @('--import','tsx','server/index.ts','--production') -WindowStyle Hidden -PassThru -WorkingDirectory $ProjectRoot -RedirectStandardOutput $runtime.serverLog -RedirectStandardError $runtime.serverErrorLog
+  $server = Start-Process -FilePath $nodePath -ArgumentList @('--import','tsx','backend/index.ts','--production') -WindowStyle Hidden -PassThru -WorkingDirectory $ProjectRoot -RedirectStandardOutput $runtime.serverLog -RedirectStandardError $runtime.serverErrorLog
   $runtime.serverPid = $server.Id; $runtime.status = 'starting-server'; Save-GlintState
   $lastHealth = ''
   while ($true) {

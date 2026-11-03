@@ -3,9 +3,9 @@ import {createServer,type Server} from "node:http";
 import {once} from "node:events";
 import {resolve} from "node:path";
 import express from "express";
-import {createApp} from "../../server/app";
-import {Engine} from "../../server/engine";
-import {Store} from "../../server/store";
+import {createApp} from "../../backend/app";
+import {Engine} from "../../backend/engine";
+import {Store} from "../../backend/store";
 
 let server:Server,engine:Engine,address:string;
 test.use({reducedMotion:"reduce"});

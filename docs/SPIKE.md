@@ -1,8 +1,8 @@
 # Stage 0 spike: baseline timing + provider contracts
 
 Date: 2026-10-28. Task 0 output. No production behavior changes in this task:
-only timing instrumentation (`shared/timing.ts`, hooks in `src/`, spans in
-`server/engine.ts`) plus this report.
+only timing instrumentation (`shared/timing.ts`, hooks in `frontend/`, spans in
+`backend/engine.ts`) plus this report.
 
 ## Part A — measured baseline (real device + real key)
 

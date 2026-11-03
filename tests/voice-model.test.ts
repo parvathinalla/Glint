@@ -4,7 +4,7 @@ import {
   SherpaKokoroVoice,
   kokoroFilesPresent,
   ttsModelDir,
-} from "../server/tts-kokoro.ts";
+} from "../backend/tts-kokoro.ts";
 /**
  * Real-model characterization: pins the Kokoro int8 voice's output
  * (24 kHz, plausible speech rate and healthy levels) against weights

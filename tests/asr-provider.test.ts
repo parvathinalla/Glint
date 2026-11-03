@@ -7,7 +7,7 @@ import {
   wsSocket,
   type AsrEvents,
   type AsrSocket,
-} from "../server/asr-provider.ts";
+} from "../backend/asr-provider.ts";
 
 class FakeSocket implements AsrSocket {
   sent: (string | Uint8Array)[] = [];

@@ -1,5 +1,5 @@
 import { expect,it } from "vitest";
-import { SamProvider,validateTrackingClip } from "../server/sam-provider.ts";
+import { SamProvider,validateTrackingClip } from "../backend/sam-provider.ts";
 import type { TrackInput } from "../shared/object-motion.ts";
 const now=1700000000000;
 const bytes=Buffer.alloc(32);bytes.write("ftyp",4);

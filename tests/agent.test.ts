@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { AgentProvider } from "../server/agent-provider.ts";
-import { Engine } from "../server/engine.ts";
-import { Store } from "../server/store.ts";
+import { AgentProvider } from "../backend/agent-provider.ts";
+import { Engine } from "../backend/engine.ts";
+import { Store } from "../backend/store.ts";
 import { publicLink } from "../shared/agent.ts";
 
 const engines: Engine[] = [];

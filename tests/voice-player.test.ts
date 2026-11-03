@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { VoicePlayer, isNeuralVoiceEnabled } from "../src/voice-player.ts";
+import { VoicePlayer, isNeuralVoiceEnabled } from "../frontend/voice-player.ts";
 
 type FakeSource = {
   onended: (() => void) | null;
@@ -83,7 +83,7 @@ function stage(options:ConstructorParameters<typeof VoicePlayer>[3]={}) {
 afterEach(() => vi.unstubAllGlobals());
 
 it("summarizes played versus canceled PCM without counting cancellation as playback",()=>{
-  const summaries:import("../src/voice-player").PlaybackSummary[]=[];
+  const summaries:import("../frontend/voice-player").PlaybackSummary[]=[];
   const {player,sources}=stage({onSummary:s=>summaries.push(s)});player.unlock();
   for(let seq=0;seq<3;seq++)player.playAudio({seq,text:seq?"":"Hello.",pcm:pcmBase64(120),sampleRate:24000});
   sources[0].onended!();player.cancel();
@@ -91,7 +91,7 @@ it("summarizes played versus canceled PCM without counting cancellation as playb
   sources[1].onended!();expect(summaries.at(-1)?.playedChunks).toBe(1);
 });
 it("summarizes a complete drain and keeps cloud failure out of device speech",()=>{
-  const summaries:import("../src/voice-player").PlaybackSummary[]=[];let unavailable=0;
+  const summaries:import("../frontend/voice-player").PlaybackSummary[]=[];let unavailable=0;
   const {player,sources,utterances}=stage({allowDeviceFallback:()=>false,onUnavailable:()=>unavailable++,onSummary:s=>summaries.push(s)});player.unlock();
   player.audioError("Do not change voice.");expect(utterances).toEqual([]);expect(unavailable).toBe(1);
   player.playAudio({seq:0,text:"Hello.",pcm:pcmBase64(120),sampleRate:24000});player.finish();sources[0].onended!();

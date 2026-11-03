@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadSubtitlesEnabled, saveSubtitlesEnabled } from "../src/subtitles.ts";
+import { loadSubtitlesEnabled, saveSubtitlesEnabled } from "../frontend/subtitles.ts";
 
 describe("subtitle preference", () => {
   afterEach(() => vi.unstubAllGlobals());
