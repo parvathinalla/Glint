@@ -2,7 +2,7 @@
 
 A standalone AI companion for hands-on tasks. This first local slice is a **checkpoint prototype**, with a blue star companion, camera controls, hands-free voice conversation, optional link research, and session-only BYOK.
 
-On a fresh page load, Glint takes a slow sideways waddle to the center, turns toward you, then gives off one warm bloom that fills the viewport before dissolving into the site. The 6.1-second intro has a discreet keyboard Skip control and Escape shortcut; reduced motion goes directly to the site. It never replays on in-app navigation or reconnect. See [docs/OPENING.md](docs/OPENING.md).
+The app opens to **Start Glint**, with camera, voice and conversation controls. Camera and microphone permissions are requested explicitly.
 
 ## Start locally
 
@@ -16,14 +16,14 @@ npm run dev
 
 Open [http://127.0.0.1:3100](http://127.0.0.1:3100). The server binds only to loopback. A private, random, HttpOnly, SameSite device-session cookie separates local users; **this is not managed account authentication**. Local loopback uses HTTP. Do not expose this development server publicly.
 
-Optional configuration is through environment variables `PORT`, `APP_ORIGIN` (must match the exact browser origin), and `GLINT_DATA_DIR`. `.env.example` contains no keys. The default command does not read env files; set variables in your shell, or use Node's `--env-file-if-exists=.env.local --import tsx server/index.ts` locally. Never put provider keys in env files for this BYOK flow or paste them into chat.
+Optional configuration is through environment variables `PORT`, `APP_ORIGIN` (must match the exact browser origin), and `GLINT_DATA_DIR`. `.env.example` contains no keys. The server loads ignored `.env.local` and `.env` files. Configure server-side LiveKit credentials there; enter the main Glint Meta model key only in the app. The separate `/livekit` comparison agent has optional model-key configuration. Never commit secrets or paste them into chat.
 
 ## Use Glint
 
 The site opens directly to **Start Glint**, then a glossy blue-star companion home. There is no walking intro, home typing bar, demo or voice-training flow. Typed input remains in **Conversation**.
 
 1. **Camera** starts the preview without also starting the microphone. Flip cameras, expand fullscreen, then return to the same session. Mic and camera are independently controlled.
-2. **Talk** starts hands-free voice after connecting a model. Local speech detection ends turns; live Muse transcription or bounded WAV fallback feeds Muse Spark. Kokoro has a four-second deadline with device-speech fallback. Noise and overlapping-speaker accuracy still require real-device validation; old voiceprints no longer gate turns.
+2. **Talk** starts hands-free voice after connecting a model. Local speech detection ends turns; live Muse transcription or bounded WAV fallback feeds Muse Spark. With `GLINT_TTS_PROVIDER=livekit`, LiveKit Inference generates streaming speech for browser PCM playback. Cloud-voice failures do not silently switch voices; device speech is an explicit setting. Kokoro remains an optional local backend. Noise and overlapping-speaker accuracy still require real-device validation; old voiceprints no longer gate turns.
 3. **Conversation** opens a sheet with typed input, live replies, source links and inline movement checks. Closing the sheet returns to home/camera without ending the session.
 4. **Settings** contains System/Light/Dark appearance, spoken replies, captions, object-analysis permission, masked session-key management, optional public instructions links and opt-in voice diagnostics. Appearance persists locally; keys do not.
 5. **Camera awareness** is off by default. Enable Background camera checks in Settings to check recent ordered frames at most every 30 seconds while connected, visible and idle, up to 20 checks per page. Checks stop with ten session calls remaining. These checks consume session calls. Voice takes priority. This is sampled visual context, not full-FPS video understanding.
@@ -32,14 +32,14 @@ The site opens directly to **Start Glint**, then a glossy blue-star companion ho
 
 Image requests use the camera tool coordinator by default. Ask “Show fairy makeup on me” with the camera open: Glint captures a fresh frame, generates with Muse Image, and displays the result over the camera without capture or submit clicks. Close the result to return to the camera; ask for changes to refine the last generated image. If the camera is off, Glint asks you to open it before capturing. Results can be downloaded. The older manual photo controls remain available when camera tools are disabled. See [photo previews](docs/LOOK_PREVIEWS.md) for limits and testing.
 
-Provider adapters and voice/link flows have fixture tests, not live provider verification. No real credentials or paid API calls were used during implementation.
+Automated tests use provider fixtures and synthetic media. Live testing has also been performed; fixture results alone do not establish real-device accuracy, latency or provider availability.
 
 ## Privacy and key lifecycle
 
 - Enter keys only in the app's masked field. The field is cleared on submission. No localStorage/sessionStorage, key persistence, request-body logs, analytics, raw provider error logs, or saved camera images are used.
 - The backend necessarily processes the raw key in memory for calls to the allowlisted `https://api.meta.ai/v1` service. It is not a zero-access vault. Session-only keys expire after 15 idle minutes or two hours absolute; process restart requires reentry. Stop/disconnect/delete cancels paid work and discards the key mapping. Pause retains an unexpired key in memory and offers explicit Disconnect key.
 - Optional progress saving stores only source instructions and user-reported task state in private local `.data/glint.sqlite`, with seven-day expiry. Without opt-in, task state remains in memory. Conversations and image bytes never enter SQLite. `.data` and secrets are ignored by Git and denied by the development server.
-- One inference can run per session; extra observations receive a clear busy response rather than growing a queue. Forty provider dispatches (including voice transcription and research) per local session is an application dispatch allowance, **not a provider-account spending cap or a dollar estimate**. Reserved calls include provider errors and stale responses because they may still be charged. No automatic paid retries.
+- One inference can run per session; extra observations receive a clear busy response rather than growing a queue. One hundred provider dispatches (including voice transcription and research) per local session is an application dispatch allowance, **not a provider-account spending cap or a dollar estimate**. Reserved calls include provider errors and stale responses because they may still be charged. No automatic paid retries.
 - BYOK pays only that provider. Public hosting, search, auth/database/storage, optional speech, and specialized compute need separate funding. No hosted service was purchased or deployed for this slice.
 
 ## Verification
@@ -57,7 +57,9 @@ Unit/integration tests use fake provider responses. Browser tests use Chromium's
 
 ## Public deployment is gated
 
-`npm start` serves the built frontend but requires an HTTPS `APP_ORIGIN` and reviewed TLS proxy. It still binds to loopback. That guard is not a production certification: account auth, durable multi-instance sessions, media retention/security review, provider validation, accuracy/latency evaluations, cost estimates, and 60/90-minute device soaks must be completed first. No indefinite background/locked-screen capture is promised. Experimental browser TTS is output only and can be interrupted by typing or the explicit interrupt control; hands-free endpoint detection, interruption and streaming phrase playback are wired; real-device echo/latency qualification remains pending. This composes Meta transcription and text generation with browser speech, rather than claiming a native speech-to-speech model connection.
+`npm run build` followed by `npm start` serves the built frontend. Production requires an HTTPS `APP_ORIGIN` or Render-provided `RENDER_EXTERNAL_URL`, and binds to `0.0.0.0` by default. Cloud voice configuration is checked at startup. See [Render deployment instructions](docs/PRODUCTION_RENDER.md) for the single-instance setup and health checks. Deployment preparation does not mean a paid service has been created.
+
+Sessions and active work remain in process memory. Account authentication, durable multi-instance sessions and real-device soak testing remain production limitations. The main app combines Meta transcription and Muse Spark with LiveKit Inference TTS over the existing HTTP/SSE audio transport; the separate `/livekit` prototype uses a room-based agent.
 
 ## Project layout
 
@@ -66,7 +68,7 @@ Unit/integration tests use fake provider responses. Browser tests use Chromium's
 - `server/engine.ts`: source confirmation, prerequisites, key lease, dispatch bounds, freshness and cancellation.
 - `server/provider.ts`: allowlisted Meta model listing and image/text chat adapter; sanitized errors and validated decisions.
 - `server/store.ts`: local SQLite progress only, never credentials or media.
-- `server/app.ts`, `server/index.ts`: HTTP boundaries, private sessions, persistent status connection, loopback launch.
+- `server/app.ts`, `server/index.ts`: HTTP boundaries, private sessions, persistent status connection and environment-aware launch.
 - `docs/`: standalone design/architecture/plan, provider references, implementation status, and tests.
 
 The standalone design documents and original Glint concept assets are in `docs/`.
@@ -132,7 +134,7 @@ fallback remains as a recovery path for unexpected provider behavior.
 
 The browser configures Zod with `jitless:true` before application schemas load.
 Vite resolves ONNX Runtime to the pinned WASM-only distribution, matching the
-WASM execution provider used for VAD and speaker inference. These changes remove
+WASM execution provider used for VAD. These changes remove
 optional dynamic-code probes without adding `unsafe-eval` or broadening CSP.
 The production-CSP browser test serves the built app with actual production
 headers, loads the neural model/WASM, and checks for policy violations without

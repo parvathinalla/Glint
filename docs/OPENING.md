@@ -1,3 +1,7 @@
+# Archived opening design
+
+This describes the retired October 2026 animation. Unused animation components and styles were removed on 3 November 2026; the app now opens directly to Start Glint. Source paths below refer to historical code available in Git history.
+
 # Glint opening sequence
 
 October 28, 2026
