@@ -12,8 +12,10 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
 .glint-brand { display:flex; align-items:center; gap:8px; color:var(--ui-text); background:none; padding:0; font-size:26px; font-weight:750!important; letter-spacing:-1px; }
 .glint-brand .spark { width:42px; height:46px; margin:0; }
 .glint-header-actions { display:flex; align-items:center; gap:18px; }
-.glint-end { background:none; color:#b64259; font-size:13px; padding:10px; }
-:root[data-theme="dark"] .glint-end { color:#ffabb8; }
+.glint-end { background:none; color:#b64259; font-size:13px; padding:10px; border-radius:12px; transition:color .2s, background-color .2s, box-shadow .2s; }
+.glint-end:is(:hover,:focus-visible) { color:#a62f48; background:#b642590d; box-shadow:0 0 14px #b6425914; }
+:root[data-theme="dark"] .glint-end { color:#f28b96; }
+:root[data-theme="dark"] .glint-end:is(:hover,:focus-visible) { color:#ffa4ae; background:#f28b960d; box-shadow:0 0 16px #f28b9626; }
 .glint-round { border:1px solid var(--ui-line); display:inline-flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:50%; background:var(--ui-surface); color:var(--ui-text); flex-shrink:0; }
 .glint-workspace { max-width:800px; margin:0 auto; }
 .glint-presence { position:relative; }
