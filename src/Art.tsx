@@ -1,10 +1,10 @@
 import { useId } from "react";
+import { SilverStar } from "./SilverStar";
 export function Spark({state="ready",small=false}:{state?:string;small?:boolean}) {
   if (small) return <SparkVector state={state} small/>;
-  return <img className={`spark jelly-star ${small?"spark-small":""} spark-${state}`}
+  return <SilverStar state={state}><img className="spark jelly-star"
     src="/avatars/glint-jelly-sky-champagne-v1.png"
-    width={512} height={512} alt={`Glint AI companion, ${state}`}
-    decoding="async" draggable={false}/>;
+    width={512} height={512} alt="" decoding="async" draggable={false}/></SilverStar>;
 }
 function SparkVector({state="ready",small=false}:{state?:string;small?:boolean}) {
   const id="spark-"+useId().replace(/[^a-zA-Z0-9_-]/g,"");

@@ -10,7 +10,7 @@ Source review: 3 November 2026. Historical diagrams may show earlier voice backe
 
 | Task | Implemented tool | Main source |
 | --- | --- | --- |
-| Companion UI | React 19, TypeScript, CSS, static jelly avatar; Lucide icons | `src/App.tsx`, `src/CompanionHome.tsx` |
+| Companion UI | React 19, TypeScript, CSS, video/canvas star avatar with jelly-image fallback; Lucide icons | `src/App.tsx`, `src/CompanionHome.tsx`, `src/SilverStar.tsx` |
 | Camera preview and recent visual evidence | getUserMedia, Canvas JPEG encoding, bounded ring buffer, quality Web Worker | `src/camera.ts`, `src/quality.worker.ts`, `shared/buffer.ts` |
 | Local person / hand-rise events | MediaPipe Pose Landmarker in a Web Worker | `src/visual-awareness.ts`, `public/vision-observer.js`, `shared/visual-events.ts` |
 | Optional recorded object movement | SAM 3.1, official Meta SAM parser, normalized per-frame box centers; experimental two-second clips | `server/sam-provider.ts`, `shared/object-motion.ts`, `docs/OBJECT_TRACKING.md` |

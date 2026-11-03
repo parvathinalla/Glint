@@ -140,3 +140,18 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
 @media (prefers-reduced-motion: reduce) { .glint-guidance > .glint-primary, .glint-guidance > .glint-primary::after { animation: none; transition: none; } }
 
 .glint-guidance > .glint-primary { min-width:210px; border-radius:100px; }
+
+/* Silver-blue companion inspired by the floating reference, with a vector fallback. */
+.silver-star { display:inline-block; position:relative; isolation:isolate; }
+.silver-star-canvas, .silver-star-fallback { position:absolute; inset:0; width:100%; height:100%; }
+.silver-star-canvas { opacity:0; pointer-events:none; }
+.silver-star-fallback>.spark { width:100%; height:100%; margin:0; }
+.silver-star-ready>.silver-star-canvas { opacity:1; }
+.silver-star-ready>.silver-star-fallback { visibility:hidden; }
+.glint-star-scene>.silver-star { animation:none; filter:none; }
+.glint-star-orbit, .glint-star-scene>.glint-sparkle { display:none; }
+/* Preserve the supplied animation's proportions and original rendered background. */
+.star-reference-video { display: none; }
+.star-transparent-animation { object-fit: contain; border-radius: 0; }
+.glint-star-scene > .silver-star:has(.star-reference-video) { width: min(440px, 85vw); aspect-ratio: 854 / 480; height: auto; }
+@media (prefers-reduced-motion: reduce) { .silver-star:has(.star-reference-video) { animation: none !important; } }
