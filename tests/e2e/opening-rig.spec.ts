@@ -31,3 +31,18 @@ test("avatar animates and retains fallback when video fails",async({page})=>{
   await expect(hero.locator(".silver-star-fallback img")).toBeVisible();
   await expect(hero).not.toHaveClass(/silver-star-ready/);
 });
+
+test("loading video does not flash the fallback star",async({page})=>{
+  let release!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  await page.route("**/glint-star-animation.mp4",async route=>{await pending;await route.continue();});
+  try {
+    await page.goto("/",{waitUntil:"domcontentloaded"});
+    const hero=page.locator(".glint-star-scene>.silver-star");
+    await expect(hero).toBeVisible();
+    await expect(hero.locator(".silver-star-fallback")).toHaveCount(0);
+    release();
+    await expect(hero).toHaveClass(/silver-star-ready/);
+    await expect(hero.locator(".silver-star-fallback")).toHaveCount(0);
+  } finally {release();}
+});

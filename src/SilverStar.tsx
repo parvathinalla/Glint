@@ -6,12 +6,13 @@ export function SilverStar({ state, children }: { state: string; children: React
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     const node = video.current;
     if (!node) return;
     const surface = canvas.current;
     const ctx = surface?.getContext("2d", { willReadFrequently: true });
-    if (!surface || !ctx) return;
+    if (!surface || !ctx) { setFailed(true); return; }
     surface.width = 640; surface.height = 360;
     let frame = 0, last = -1000;
     const draw = () => {
@@ -36,6 +37,7 @@ export function SilverStar({ state, children }: { state: string; children: React
       }
       ctx.putImageData(pixels, 0, 0);
       setReady(true);
+      setFailed(false);
     };
     const render = (now: number) => {
       frame = requestAnimationFrame(render);
@@ -65,8 +67,8 @@ export function SilverStar({ state, children }: { state: string; children: React
     };
   }, []);
   return <span className={`spark silver-star spark-${state} ${ready ? "silver-star-ready" : ""}`} role="img" aria-label={`Glint animated star companion, ${state}`}>
-    <span className="silver-star-fallback" aria-hidden="true">{children}</span>
+    {failed && <span className="silver-star-fallback" aria-hidden="true">{children}</span>}
     <canvas ref={canvas} className="silver-star-canvas star-transparent-animation" aria-hidden="true" />
-    <video ref={video} src={starAnimation} muted loop playsInline preload="auto" aria-hidden="true" className="star-reference-video" onError={() => setReady(false)} />
+    <video ref={video} src={starAnimation} muted loop playsInline preload="auto" aria-hidden="true" className="star-reference-video" onError={() => { setReady(false); setFailed(true); }} />
   </span>;
 }
