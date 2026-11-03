@@ -385,6 +385,12 @@ export function CompanionHome({
     voiceInput?: { audio?: Blob; asrFinalMs?: number; note?: string },
     skipLookRouting = false,
   ) {
+    if(import.meta.env.VITE_GLINT_SUBMISSION_BUILD === "1" && voiceInput?.audio){
+      turns.current.reset();pendingVoice.current=null;
+      speech.current?.resume();voicePlayer.current?.resume();
+      setVoiceNote("Live transcription unavailable. Repeat your question or use Conversation. Recording fallback is off in this profile.");
+      return;
+    }
     setEnded(false);
     if((taskState.current?.state==="busy"&&taskState.current.kind==="generated")||followupWorking.current){enqueueImageFollowup(text,withImage,voiceInput);return;}
     if(taskState.current?.state==="busy"){
@@ -1554,7 +1560,7 @@ export function CompanionHome({
           <p className="glint-setting-note">{view.calls} of {view.limit} session calls used. Camera checks also use this allowance.</p>
           <button className="glint-text" disabled={!online} onClick={()=>void newCallSession()}>Start a new call allowance</button><small>Ends this session, clears conversation and images, resets the allowance, and disconnects your key. Provider charges still apply.</small>
           <button className="glint-setting-link" onClick={() => { setSettingsOpen(false); settingsDialog.current?.close(); openLink(); }}><span>Add instructions link<small>Use a public product page or manual</small></span><Link size={18}/></button>
-          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates requested previews from the camera or a previous result. Ambiguous requests need clarification. Speech uses the configured neural voice with device-voice fallback.</p></details>
+          <details className="glint-advanced"><summary>About the models</summary><p>Muse Voice Transcribe turns speech into text. Muse Spark answers questions using your conversation and recent camera frames. SAM 3.1 analyzes requested recorded movement. Muse Image creates requested previews from the camera or a previous result. Ambiguous requests need clarification. {import.meta.env.VITE_GLINT_SUBMISSION_BUILD === "1" ? "Submission speech uses your browser’s installed voice; no external TTS model is called." : "Experimental speech uses the configured neural voice. Device speech is an explicit alternative."}</p></details>
           <details className="glint-advanced"><summary>Diagnostic trace</summary><p>Automatic event tracing records request timing, speech stages, task states, routing and failures. No conversation text, keys, audio or images. The latest 500 browser events and 500 events per server source stay in memory; server events also appear in local server logs. Download after a problem, before closing the page or restarting.</p><button className="glint-text" onClick={()=>void downloadTrace()}>Download diagnostic trace</button>{traceStatus&&<p role="status">{traceStatus}</p>}</details>
           <details className="voice-diagnostics glint-advanced"><summary>Voice test diagnostics</summary><p>Optional event names and timings only. No audio, transcript, images, voiceprints or keys. Up to 120 events remain in this page; shared events appear in server logs.</p>
             <label className="glint-setting-row"><span>Record and share voice diagnostics</span><input type="checkbox" checked={diagnosticsOn} onChange={event => { if (event.target.checked) { diagnostics.current.start(); setDiagnosticEvents([]); } else diagnostics.current.stop(); setDiagnosticUpload(""); setDiagnosticsOn(event.target.checked); }}/></label>

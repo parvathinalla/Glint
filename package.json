@@ -18,7 +18,11 @@
     "predev": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-tts.mjs",
     "prebuild": "node scripts/prepare-vision.mjs && node scripts/prepare-vad.mjs && node scripts/prepare-tts.mjs",
     "livekit:agent": "tsx server/livekit-runner.ts",
-    "livekit:download": "tsx server/livekit-runner.ts download-files"
+    "livekit:download": "tsx server/livekit-runner.ts download-files",
+    "dev:submission": "tsx scripts/submission.ts dev",
+    "build:submission": "tsx scripts/submission.ts build",
+    "start:submission": "tsx scripts/submission.ts start",
+    "test:submission": "playwright test -c playwright.submission.config.ts"
   },
   "dependencies": {
     "@livekit/agents": "^1.9.5",
@@ -68,7 +72,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/parvathinalla/Glint/issues"
   },

@@ -1015,6 +1015,7 @@ test("muting a streamed reply prevents later sentences from being spoken", async
     await route.fulfill({ json: view });
   });
   await page.addInitScript(() => {
+    localStorage.setItem("glint-neural-voice", "0");
     const fixture = window as unknown as {
       spoken: string[];
       streamFixture: { delta: (text: string) => void; finish: () => void };
@@ -1038,6 +1039,7 @@ test("muting a streamed reply prevents later sentences from being spoken", async
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(value)}\n\n`),
             );
+          emit({ type:"voice", mode:"none" });
           fixture.streamFixture = {
             delta: (chunk) => {
               text += chunk;

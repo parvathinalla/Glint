@@ -181,3 +181,6 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
     background-position: 50% 50%;
   }
 }
+
+.submission-notice { max-width:1030px; margin:16px auto; padding:12px 18px; border:1px solid var(--ui-line); border-radius:12px; color:var(--ui-text); background:var(--ui-surface); font-size:13px; }
+.submission-notice p { margin:0 0 8px; }

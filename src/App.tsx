@@ -462,6 +462,13 @@ export default function App() {
               <LoaderCircle className="spin" /> Preparing your workspace…
             </div>
           )}
+          {view && page === "home" && import.meta.env.VITE_GLINT_SUBMISSION_BUILD === "1" && <aside className="submission-notice" role="note">
+            <p>Submission profile: Meta API + browser speech. Pose inference and comparison agents are off.</p>
+            <button className="button" onClick={async()=>{
+              const result=await update("demo",{});
+              if(result){setMode("replay");setPage("work");}
+            }}>Open fixture replay · no key, no AI inference</button>
+          </aside>}
           {view && page === "home" && (
             <CompanionHome
               key={conversation}

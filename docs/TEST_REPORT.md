@@ -1,8 +1,10 @@
+> Current submission headline: **355 unit/integration tests passed**, confirmed by the entrant on Nov 3, 2026. The original browser receipt was 73 passed and 2 failed; the repaired full rerun passed and is tracked in [TEST_EVIDENCE.md](TEST_EVIDENCE.md). The dated counts and measurements below are historical, not a replacement current total.
+
 # Glint local slice test report
 
 October 28, 2026 · Windows · Node v24.11.1 · npm 11.6.2
 
-Root: `C:\Users\Parvathi\Documents\ChatGPT\Glint`. Local preview: [http://127.0.0.1:3100](http://127.0.0.1:3100). This report covers the standalone checkpoint prototype, not production readiness.
+Root: `[LOCAL WORKSPACE]`. Local preview: [http://127.0.0.1:3100](http://127.0.0.1:3100). This report covers the standalone checkpoint prototype, not production readiness.
 
 ## Architecture planning update
 

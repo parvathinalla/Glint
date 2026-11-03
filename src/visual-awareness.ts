@@ -16,7 +16,7 @@ export function useVisualAwareness(
     "off" | "loading" | "ready" | "unavailable"
   >("off");
   useEffect(() => {
-    if (!active) {
+    if (!active || import.meta.env.VITE_GLINT_SUBMISSION_BUILD === "1") {
       setStatus("off");
       return;
     }

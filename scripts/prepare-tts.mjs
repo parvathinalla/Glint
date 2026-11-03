@@ -22,6 +22,10 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { URL } from "node:url";
 import https from "node:https";
+if(process.env.GLINT_NEURAL_VOICE==="0"){
+  console.log("tts: browser speech selected; skipping local speech model downloads");
+  process.exit(0);
+}
 if(process.env.GLINT_TTS_PROVIDER==="livekit"){
   console.log("tts: cloud voice selected; skipping local Kokoro model downloads");
   process.exit(0);

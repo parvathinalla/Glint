@@ -51,9 +51,11 @@ test("instructions link opens and closes from settings", async ({page}) => {
 });
 test("desktop and conversation pass automated accessibility checks", async ({page}) => {
   await connected(page); await page.setViewportSize({width:1440,height:960}); await page.goto("/");
+  await expect(page.getByRole("heading",{name:"What can I help you with?",exact:true})).toBeVisible();
   await page.screenshot({path:"test-results/ui-home-desktop.png",fullPage:true});
   expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
   await page.getByRole("button",{name:"Open conversation"}).click();
+  await expect(page.getByRole("dialog",{name:"Conversation",exact:true})).toBeVisible();
   expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
 });
 test("camera opens with mic off, fullscreen returns, and end stops media", async ({page,context}) => {

@@ -5,6 +5,7 @@ import { SpeechQueue } from "./speech-queue.ts";
  * call; anything unreadable means the neural voice stays on.
  */
 export function isNeuralVoiceEnabled(): boolean {
+  if(import.meta.env.VITE_GLINT_SUBMISSION_BUILD === "1") return false;
   try {
     if (typeof localStorage === "undefined") return true;
     return localStorage.getItem("glint-neural-voice") !== "0";

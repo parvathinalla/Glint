@@ -6,6 +6,6 @@ import "./companion-ui.css";
 import {lazy,Suspense} from "react";
 const LiveKitPrototype=lazy(()=>import("./LiveKitPrototype"));
 const App=lazy(()=>import("./App.tsx"));
-createRoot(document.getElementById("root")!).render(<Suspense fallback={<p>Loading Glint…</p>}>
-  {window.location.pathname==="/livekit"?<LiveKitPrototype/>:<App/>}
+createRoot(document.getElementById("root")!).render(<Suspense fallback={<main aria-busy="true"><h1>Loading Glint…</h1></main>}>
+  {window.location.pathname==="/livekit"&&import.meta.env.VITE_GLINT_SUBMISSION_BUILD!=="1"?<LiveKitPrototype/>:<App/>}
 </Suspense>);
