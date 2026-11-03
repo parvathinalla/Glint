@@ -155,3 +155,27 @@ body, .app-shell, .app-shell>main, .opening { background:var(--ui-bg); color:var
 .star-transparent-animation { object-fit: contain; border-radius: 0; }
 .glint-star-scene > .silver-star:has(.star-reference-video) { width: min(440px, 85vw); aspect-ratio: 854 / 480; height: auto; }
 @media (prefers-reduced-motion: reduce) { .silver-star:has(.star-reference-video) { animation: none !important; } }
+
+/* Match the welcome button's white-blue sheen on the three session controls. */
+.glint-controls > :is(.glint-control, .glint-mic) > svg {
+  transition: color .2s, border-color .2s, box-shadow .2s;
+}
+.glint-controls > :is(.glint-control, .glint-mic):not(:disabled):is(:hover, :focus-visible) > svg {
+  color: #203c53;
+  border-color: #d2eaf5;
+  background: linear-gradient(110deg, transparent 25%, #ffffffa6 48%, transparent 70%),
+    linear-gradient(115deg, #b4d7e9, #e2f5fb 45%, #a8cbe7 80%, #c4e5f1);
+  background-size: 250% 100%, 220% 100%;
+  box-shadow: 0 4px 20px #8bc7ea40, inset 0 1px 0 #ffffffc0;
+  animation: glint-control-shine 2.4s ease-in-out infinite;
+}
+@keyframes glint-control-shine {
+  0% { background-position: 150% 50%, 0% 50%; }
+  100% { background-position: -150% 50%, 100% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glint-controls > :is(.glint-control, .glint-mic):not(:disabled):is(:hover, :focus-visible) > svg {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}
