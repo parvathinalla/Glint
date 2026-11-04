@@ -1,3 +1,5 @@
+import {ActivityMonitor,asksForActivityResult,trackingConfirmation,type ActivityState,type ActivityDependencies} from "./activity-monitor";
+import {ActivityTrackingPanel} from "./ActivityTrackingPanel";
 import {clientDiagnostics,traceClient} from "./diagnostics";
 import {withRequestDeadline} from "./request-deadline";
 import {
@@ -28,7 +30,7 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import { asDataUrl, useCamera, encodeCameraFrames } from "./camera.ts";
+import { asDataUrl, useCamera, encodeCameraFrames, compactActivityFrames } from "./camera.ts";
 import { useVisualAwareness } from "./visual-awareness.ts";
 import type { VisualEvent } from "../shared/visual-events.ts";
 import {
@@ -139,6 +141,9 @@ export function CompanionHome({
   const [toolsEnabled] = useState(()=>{try{return localStorage.getItem("glint-camera-tools")!=="0";}catch{return true;}});
   const [cameraTask,setCameraTask]=useState<CameraTaskEvent|null>(null);
   const taskRunner=useRef<CameraTaskRunner|null>(null);
+  const activity=useRef<ActivityMonitor|null>(null);
+  const activityDeps=useRef<ActivityDependencies|null>(null);
+  const [activityState,setActivityState]=useState<ActivityState|null>(null);
   const taskDeps=useRef<TaskDependencies|null>(null);
   const lastTaskSummary=useRef("");
   const taskQuestion=useRef("");
@@ -391,6 +396,8 @@ export function CompanionHome({
       setVoiceNote("Live transcription unavailable. Repeat your question or use Conversation. Recording fallback is off in this profile.");
       return;
     }
+    if(text&&handleActivityConfirmation(text))return;
+    if(activity.current?.active&&text&&asksForActivityResult(text)){finishActivity();return;}
     setEnded(false);
     if((taskState.current?.state==="busy"&&taskState.current.kind==="generated")||followupWorking.current){enqueueImageFollowup(text,withImage,voiceInput);return;}
     if(taskState.current?.state==="busy"){
@@ -522,6 +529,8 @@ export function CompanionHome({
           return;
         }
       }
+      if(handleActivityConfirmation(text))return;
+      if(activity.current?.active&&asksForActivityResult(text)){finishActivity();return;}
       if(toolsEnabled&&!instructionsUrl&&isTaskStatusQuestion(text)){
         traceClient({stage:"route",reason:"status",count:text.length});
         const task=taskState.current;
@@ -642,7 +651,7 @@ export function CompanionHome({
           model: model || current.current.key.models[0],
           voice: isNeuralVoiceEnabled() ? "neural" : "off",
           lookPreview:lookRequest&&!skipLookRouting?{request:lookPrompt,stage:lookAccepted?"photo-controls":"offered"}:undefined,
-          cameraTools:toolsEnabled&&!instructionsUrl?{camera:camera.active,tracking:trackingAllowedRef.current,lastImage:taskRunner.current?.imageAvailable??false,activeCheck:taskRunner.current?.activeCheck,lastResult:lastTaskSummary.current||undefined}:undefined,
+          cameraTools:toolsEnabled&&!instructionsUrl?{camera:camera.active,tracking:trackingAllowedRef.current,lastImage:taskRunner.current?.imageAvailable??false,activeCheck:taskRunner.current?.activeCheck,lastResult:activity.current?.context()??(lastTaskSummary.current||undefined)}:undefined,
           requestId: crypto.randomUUID(),
         },
         controller.signal,
@@ -736,6 +745,21 @@ export function CompanionHome({
         result.epoch !== current.current.epoch
       )
         return;
+      if(result.action?.name==="track_object_motion"&&!/\b(?:clip|short recording|two.second|2.second)\b/iu.test(text)){
+        result.action={id:result.action.id,name:"start_activity_tracking",args:{goal:text.slice(0,600)}};
+      }
+      if(result.action?.name==="start_activity_tracking"){
+        const proposed=activity.current?.propose(result.action.args.goal,result.action.args.checkpoints??[],result.action.args.mode??"observe");
+        if(!proposed){
+          const message=activity.current?.pending?"Your tracking confirmation is already open.":"Your current tracking session is still running.";
+          setMessages(items=>[...items.filter(item=>!item.streaming),{who:"glint",text:message}].slice(-20) as Message[]);
+          return;
+        }
+        setConversationOpen(false);setSettingsOpen(false);
+        setMessages(items=>[...items,{who:"glint",text:actionMessage(result.action!)}].slice(-20) as Message[]);
+        speakLocalReply(actionMessage(result.action));return;
+      }
+      if(result.action?.name==="cancel_camera_task"&&activity.current?.active){finishActivity();return;}
       setMessages((items) => {
         const final: Message = {
           who: "glint",
@@ -838,6 +862,50 @@ export function CompanionHome({
     if(signal.aborted||result.epoch!==current.current.epoch)throw Error("The camera task was canceled.");
     return result;
   }
+  function handleActivityConfirmation(text:string){
+    if(!activity.current?.pending)return false;
+    const decision=trackingConfirmation(text);if(!decision)return false;
+    if(decision==="cancel"){activity.current.dismiss();localTaskReply(text,"Tracking canceled.");return true;}
+    if(!camera.video.current?.srcObject){localTaskReply(text,"Open the camera, then say start.");return true;}
+    activity.current.confirm();setConversationOpen(false);setSettingsOpen(false);
+    localTaskReply(text,"Tracking started.");return true;
+  }
+  function finishActivity(){
+    const text=activity.current?.stop();if(!text)return;
+    lastTaskSummary.current=text.slice(0,700);
+    setMessages(items=>[...items,{who:"glint",text}].slice(-20) as Message[]);
+    stopSpeech();speakLocalReply(text.slice(0,1000));
+  }
+  activityDeps.current={
+    session:()=>camera.video.current?.srcObject??null,
+    visible:()=>!document.hidden,
+    busy:()=>lock.current||followupWorking.current||mic.recording||mic.preparing||speaking||taskState.current?.state==="busy",
+    capture:async()=>{
+      // The camera ring may still be encoding its first frame after permission.
+      for(let attempt=0;attempt<20;attempt++){
+        await camera.sample();const frames=camera.recent();if(frames.length)return compactActivityFrames(frames);
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      return [];
+    },
+    observe:async(goal,frames,previous,signal,checkpoints=[],nextIndex=0)=>{
+      const controller=signal;controller.throwIfAborted();
+      // Share the existing preemptible visual lane: speech takes priority.
+      const work=new AbortController();const abort=()=>work.abort();controller.addEventListener("abort",abort,{once:true});
+      request.current=work;lock.current=true;visualJob.current=true;setObserving(true);
+      try{return await taskApi("activity-check",{goal,frames,previous,checkpoints,nextIndex,model:model||current.current.key.models[0]},work.signal) as unknown as VisualObservation;}
+      catch(error){if(work.signal.aborted)throw new DOMException("Observation interrupted","AbortError");throw error;}
+      finally{controller.removeEventListener("abort",abort);if(request.current===work){request.current=null;lock.current=false;visualJob.current=false;setObserving(false);}}
+    },
+    change:state=>{setActivityState(state);if(state)traceClient({stage:"task",action:"start_activity_tracking",state:state.phase==="result"?"result":state.phase==="watching"?"busy":"watching",count:state.local?.count??state.checks});},
+  };
+  if(!activity.current)activity.current=new ActivityMonitor({
+    session:()=>activityDeps.current!.session(),visible:()=>activityDeps.current!.visible(),busy:()=>activityDeps.current!.busy(),
+    capture:()=>activityDeps.current!.capture(),observe:(...args)=>activityDeps.current!.observe(...args),change:state=>activityDeps.current!.change(state),
+  });
+  useEffect(()=>()=>activity.current?.dispose(),[]);
+  useEffect(()=>{activity.current?.cameraChanged();},[camera.active,camera.facingMode]);
+  useEffect(()=>{const hide=()=>{if(document.hidden)activity.current?.pause("Page hidden. Tracking paused with a coverage gap; choose Resume tracking when ready.");};document.addEventListener("visibilitychange",hide);return()=>document.removeEventListener("visibilitychange",hide);},[]);
   taskDeps.current={
     session:()=>camera.video.current?.srcObject??null,
     visible:()=>!document.hidden,
@@ -1124,17 +1192,19 @@ export function CompanionHome({
     });
     return operation;
   }
-  useVisualAwareness(camera.video, camera.active, (event) => {
+  const poseStatus=useVisualAwareness(camera.video, camera.active, (event) => {
+    if(activity.current?.active)return;
     pendingVisualEvent.current = { event, at: Date.now() };
     eventHistory.current = [
       ...eventHistory.current,
       { kind: event, at: Date.now() },
     ].slice(-4);
     if (visualJob.current) void interrupt(false);
-  });
+  },(points,at)=>activity.current?.pose(points,at),activityState?.mode==="hand_raises"&&activityState.phase==="watching");
   const observationTick = useRef<() => Promise<void>>(async () => {});
   observationTick.current = async () => {
     if (
+      activity.current?.active ||
       !camera.active ||
       !current.current.key.connected ||
       !online ||
@@ -1301,7 +1371,7 @@ export function CompanionHome({
         const answered = failStream();
         if (!answered && info.reason === "allowance-exhausted")
           setProblem(
-            "The 100-call session allowance is used. No more work was sent.",
+            `The ${current.current.limit}-call session allowance is used. No more work was sent.`,
           );
       },
       onError: (code, message) => {
@@ -1410,6 +1480,7 @@ export function CompanionHome({
   };
   const endSession = () => {
     taskCameraVersion.current++;taskCameraOpening.current=false;queuedTaskVoice.current=null;taskState.current=null;
+    activity.current?.dismiss();
     taskRunner.current?.reset();setCameraTask(null);lastTaskSummary.current="";
     camera.stop(); mic.cancel(); stopSpeech();
     setTrackingRequested(false); setLastTrackingClip(null); setObjectMotion(null);
@@ -1473,6 +1544,7 @@ export function CompanionHome({
         <div className="glint-workspace">
           <div className="glint-presence">
             <div className={`companion-camera glint-camera ${camera.active || camera.starting ? "is-active" : ""} ${fullscreen ? "is-fullscreen" : ""}`}>
+      <ActivityTrackingPanel key={`${activityState?.goal??"none"}:${activityState?.startedAt??"pending"}`} state={activityState} poseStatus={poseStatus} onStart={checkpoints=>activity.current?.confirm(checkpoints)} onStop={finishActivity} onResume={()=>activity.current?.resume()} onDismiss={()=>activity.current?.dismiss()}/>
               <video ref={camera.video} autoPlay muted playsInline aria-label="Your live camera preview"/>
               {camera.active && <>
                 <div className="glint-camera-status"><i/> Camera on · {mic.enabled ? "Mic on" : "Mic off"}</div>
@@ -1494,7 +1566,7 @@ export function CompanionHome({
             <div className="glint-guidance">
               {started ? <>
                 <p className={`glint-status ${mic.enabled || speaking || busy ? "is-active" : ""}`} role="status"><i/>{status}</p>
-                <h1>{camera.active ? !conversationOpen && latestAnswer ? latestAnswer.slice(0, 180) + (latestAnswer.length > 180 ? "…" : "") : "Show me what you’re working on." : "What can I help you with?"}</h1>
+                <h1>{activityState?.phase==="watching" ? "Tracking activity" : activityState?.phase==="paused" ? "Tracking paused" : camera.active ? !conversationOpen && latestAnswer ? latestAnswer.slice(0, 180) + (latestAnswer.length > 180 ? "…" : "") : "Show me what you’re working on." : "What can I help you with?"}</h1>
                 <p className="glint-supporting">{camera.active ? visionPaused ? "Camera analysis paused. Reopen your camera to resume." : observing ? "Checking your recent camera view…" : awareness?.activity ? awareness.activity.slice(0, 120) : "Ask a question about what you see." : mic.enabled ? "Go ahead. I’m listening." : "Talk, type, or show me through your camera."}</p>
               </> : <><p className="glint-eyebrow">A LITTLE SPARK. A CLEARER NEXT STEP.</p><h1>Show me. Tell me.<br/>Let’s do it.</h1><p className="glint-supporting">A camera-and-voice companion for the things in front of you.</p>
                 <button className="glint-primary" onClick={() => { setStarted(true); try { sessionStorage.setItem("glint-started", "1"); } catch { /* optional */ } }}>Start Glint <ArrowUp className="glint-next" size={19}/></button>
@@ -1513,6 +1585,7 @@ export function CompanionHome({
         <footer className="glint-attribution"><svg className="meta-mark" width="22" height="14" viewBox="0 0 32 20" aria-hidden="true"><path d="M16 10C12 3 10 2 7 2C3 2 1 8 1 13C1 17 3 18 5 18C9 18 12 12 16 6C19 2 21 2 24 2C28 2 31 8 31 13C31 17 29 18 27 18C23 18 20 13 16 7C13 3 10 2 7 2" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg> Built with Meta models <span>See · Understand · Guide</span></footer>
       </>}
       </div>
+
       {toolsEnabled&&<CameraTaskPanel task={cameraTask} onClose={()=>{setCameraTask(null);taskRunner.current?.dismissPending();}} onCancel={cancelCameraTask} onOpenCamera={openTaskCamera}/>}
       <dialog ref={conversationDialog} className="glint-sheet glint-conversation" aria-label="Conversation" onCancel={() => setConversationOpen(false)}>
         <div className="glint-sheet-handle"/>

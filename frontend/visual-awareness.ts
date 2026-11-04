@@ -9,9 +9,13 @@ export function useVisualAwareness(
   video: RefObject<HTMLVideoElement | null>,
   active: boolean,
   onEvent: (event: VisualEvent) => void,
+  onPose?: (points: Landmark[], at:number) => void,
+  continuous = false,
 ) {
   const callback = useRef(onEvent);
   callback.current = onEvent;
+  const poseCallback=useRef(onPose),fast=useRef(continuous);
+  poseCallback.current=onPose;fast.current=continuous;
   const [status, setStatus] = useState<
     "off" | "loading" | "ready" | "unavailable"
   >("off");
@@ -23,6 +27,7 @@ export function useVisualAwareness(
     let live = true,
       ready = false,
       pending = false,
+      lastSent = -Infinity,
       lastTime = -1;
     setStatus("loading");
     const worker = new Worker("/vision-observer.js"),
@@ -38,6 +43,7 @@ export function useVisualAwareness(
       }
       if (event.data.kind === "pose") {
         pending = false;
+        poseCallback.current?.(event.data.landmarks as Landmark[],event.data.at);
         for (const change of tracker.update(
           event.data.landmarks as Landmark[],
           event.data.at,
@@ -55,11 +61,14 @@ export function useVisualAwareness(
         !live ||
         !ready ||
         pending ||
+        document.hidden ||
+        performance.now()-lastSent < (fast.current?100:200) ||
         !camera?.videoWidth ||
         camera.currentTime === lastTime
       )
         return;
       pending = true;
+      lastSent=performance.now();
       lastTime = camera.currentTime;
       try {
         const bitmap = await createImageBitmap(camera, {
@@ -78,7 +87,7 @@ export function useVisualAwareness(
       } catch {
         pending = false;
       }
-    }, 200);
+    }, 100);
     return () => {
       live = false;
       clearInterval(timer);

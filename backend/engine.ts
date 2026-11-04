@@ -1,3 +1,5 @@
+import {ActivityProvider} from "./activity-provider.ts";
+import {activityInput} from "../shared/agent.ts";
 import {traceServer} from "./diagnostics";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -73,7 +75,7 @@ export type VoiceOptions = {
 /** One client frame holds at most ~1.3 s of provider-native PCM. */
 export const MAX_VOICE_FRAME_BYTES = 64000;
 /** Paid provider dispatches allowed per session before APP_LIMIT. */
-export const MAX_SESSION_CALLS = 100;
+export const MAX_SESSION_CALLS = 3000;
 export class Engine {
   private sessions = new Map<string, Session>();
   constructor(
@@ -85,6 +87,7 @@ export class Engine {
     private sam = new SamProvider(),
     private images = new ImageProvider(),
     private conditions = new ConditionProvider(),
+    private activities = new ActivityProvider(),
   ) {}
   session(token?: string): { session: Session; token?: string } {
     const valid = token && /^[a-f0-9]{64}$/.test(token);
@@ -366,7 +369,7 @@ export class Engine {
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 100-call session allowance is used. No more work was sent.",
+        `The ${MAX_SESSION_CALLS}-call session allowance is used. No more work was sent.`,
       );
     const controller = new AbortController();
     if(imageLane)s.imageController=controller;
@@ -609,6 +612,12 @@ export class Engine {
     // Photo bytes and generated images never enter agent history or SQLite.
     return {image:result.image,epoch:s.epoch};
   }
+  async checkActivity(s:Session,input:z.infer<typeof activityInput>){
+    if(!s.key?.models.includes(input.model))throw new Problem(401,"MODEL_REQUIRED","Connect an available Muse Spark model.");
+    this.checkFrames(input.frames);
+    const result=await this.agentCall(s,input.epoch,input.requestId,"observe",(key,signal)=>this.activities.observe(key,input.model,input.goal,input.checkpoints,input.frames,input.nextIndex,signal));
+    return {...result,epoch:s.epoch,from:input.frames[0].capturedAt,capturedAt:input.frames.at(-1)!.capturedAt};
+  }
   async checkCondition(s:Session,input:z.infer<typeof conditionInput>){
     if(this.now()-input.capturedAt>5000||input.capturedAt>this.now()+1000)throw new Problem(409,"STALE","Capture a fresh camera frame for this check.");
     if(!s.key?.models.includes(input.model))throw new Problem(401,"MODEL_REQUIRED","Connect an available Muse Spark model.");
@@ -658,7 +667,7 @@ export class Engine {
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 100-call session allowance is used. No more work was sent.",
+        `The ${MAX_SESSION_CALLS}-call session allowance is used. No more work was sent.`,
       );
     s.seen.add(requestId);
     if (s.seen.size > 100) s.seen.delete(s.seen.values().next().value!);
@@ -828,7 +837,7 @@ export class Engine {
       throw new Problem(
         429,
         "APP_LIMIT",
-        "The 100-call local session allowance is used. No further model work will be dispatched.",
+        `The ${MAX_SESSION_CALLS}-call local session allowance is used. No further model work will be dispatched.`,
       );
     const epoch = s.epoch;
     const controller = new AbortController();

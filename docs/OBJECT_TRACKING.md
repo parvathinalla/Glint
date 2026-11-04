@@ -9,7 +9,7 @@ Glint can now submit a user-requested two-second camera clip to Meta SAM 3.1, pa
 3. If there is no fresh valid recorded result, Glint asks for a new movement. Open the camera if it is off, then explicitly choose **Ready — check movement**.
 4. Keep the camera still and move the object during the two-second recording. The camera-relative result appears in chat. **View clip** opens optional detail; **Check again** returns to readiness and does not automatically record.
 
-The button sends a paid SAM request using the session's connected Meta key. No SAM calls happen automatically. Hosted SAM bills video for at least 50 frames per request, even for shorter clips. The existing 100-dispatch session allowance is not a dollar spending cap. Model-list success for Spark does not verify SAM entitlement.
+The button sends a paid SAM request using the session's connected Meta key. No SAM calls happen automatically. Hosted SAM bills video for at least 50 frames per request, even for shorter clips. The existing 3000-dispatch session allowance is not a dollar spending cap. Model-list success for Spark does not verify SAM entitlement.
 
 ## Pipeline
 

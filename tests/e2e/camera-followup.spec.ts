@@ -54,7 +54,7 @@ test("the explicit allowance reset disconnects the key and stops the camera",asy
  await expect(page.getByRole("button",{name:"Open camera",exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Open settings",exact:true}).click();
  await expect(page.getByRole("button",{name:/Connect model/})).toBeVisible();
- await expect(page.getByText("0 of 100 session calls used. Camera checks also use this allowance.",{exact:true})).toBeVisible();
+ await expect(page.getByText("0 of 3000 session calls used. Camera checks also use this allowance.",{exact:true})).toBeVisible();
 });
 
 test("diagnostic export contains routing events but no conversation text",async({page})=>{

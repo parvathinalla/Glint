@@ -2,6 +2,7 @@ import { z } from "zod";
 const text=z.string().trim().min(1).max(600);
 export const markSchema=z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),width:z.number().positive().max(1),height:z.number().positive().max(1),label:z.string().trim().min(1).max(120)}).strict().refine(m=>m.x+m.width<=1.001&&m.y+m.height<=1.001,"Mark outside image");
 const definitions={
+ start_activity_tracking:z.object({goal:z.string().trim().min(3).max(600),mode:z.enum(["observe","hand_raises"]).optional(),checkpoints:z.array(z.string().trim().min(1).max(120)).max(24).optional()}).strict(),
  edit_camera_image:z.object({prompt:z.string().trim().min(3).max(1500),source:z.enum(["camera","last_result"])}).strict(),
  annotate_camera_frame:z.object({frameIndex:z.number().int().min(0).max(5),summary:text,confidence:z.enum(["low","medium","high"]),marks:z.array(markSchema).max(6)}).strict().refine(v=>v.confidence!=="low"||v.marks.length===0,"Uncertain observations must not invent marks"),
  track_object_motion:z.object({concept:z.string().trim().min(2).max(100)}).strict(),
@@ -19,9 +20,10 @@ export function parseCameraAction(name:unknown,args:unknown,id:unknown):CameraAc
 const object=(properties:Record<string,unknown>)=>({type:"object",additionalProperties:false,properties,required:Object.keys(properties)});
 const string={type:"string"};
 const functions=[
+ ["start_activity_tracking","Propose tracking with one confirmation question. Choose mode hand_raises ONLY to count repeated raising of either hand above shoulder level and lowering both hands again; this runs continuously on the device. Choose observe for all other activities, including yoga, squats, push-ups and objects: this is sampled observation, NOT an exact repetition counter. Do not claim arbitrary activity counts. Ask a clarification if the movement to count is ambiguous. No inference begins before Start tracking. checkpoints are optional observation labels, not a reliable repetition total.",object({goal:string,mode:{type:"string",enum:["observe","hand_raises"]},checkpoints:{type:"array",items:string}})],
  ["edit_camera_image","For an explicit request to create/edit a visual result. Capture the current camera view or refine the last generated result. Resolve style from conversation. Progress questions, completion reports and acknowledgments do not authorize generation. How-to or demonstration questions need an explanation or clarification unless the user explicitly requests a generated image. Never use generated images as evidence of real actions.",object({prompt:string,source:{type:"string",enum:["camera","last_result"]}})],
  ["annotate_camera_frame","Mark one supplied camera frame when asked to show a visible issue, part, position or form. Normalized coordinates on that exact frame. Never invent hidden details, diagnoses or calibrated body angles. Low confidence requires empty marks. Missing evidence: ask for a clearer view.",object({frameIndex:{type:"integer"},summary:string,confidence:{type:"string",enum:["low","medium","high"]},marks:{type:"array",items:object({x:{type:"number"},y:{type:"number"},width:{type:"number"},height:{type:"number"},label:string})}})],
- ["track_object_motion","Record and analyze a NEW short MP4 clip of one object, only on user request and when tracking is enabled. Never claim to recover past movement by recording now.",object({concept:string})],
+ ["track_object_motion","Only when the user explicitly requests a short recorded clip of object motion. Otherwise prefer start_activity_tracking and confirmation. Never use this for a yoga/exercise routine or round counting. Use start_activity_tracking for ongoing observation. Record and analyze a NEW short MP4 clip of one object, only on user request and when tracking is enabled. Never claim to recover past movement by recording now.",object({concept:string})],
  ["schedule_camera_check","Schedule ONE visible condition check 5–120 seconds from now. This checks the state at the deadline, NOT continuous monitoring or whether something happened earlier. Choose alertIf from user intent. Clarify requests for continuous/event monitoring, repetitions or longer durations.",object({condition:string,seconds:{type:"integer"},alertIf:{type:"string",enum:["met","not_met"]}})],
  ["cancel_camera_task","Stop the current camera task or scheduled check when the user asks.",object({})],
  ["request_camera","Ask the user to open the camera for a visual task. Do not claim a view exists while the camera is off.",object({reason:string})],
@@ -29,6 +31,7 @@ const functions=[
 export const cameraToolDefinitions=functions.map(([name,description,parameters])=>({type:"function",name,description,parameters,strict:true}));
 export function actionMessage(action:CameraAction){
  switch(action.name){
+ case "start_activity_tracking":return "Should I track this activity?";
  case "edit_camera_image":return action.args.source==="last_result"?"I’m updating your image.":"I’m creating your image.";
  case "annotate_camera_frame":return action.args.summary;
  case "track_object_motion":return `I’ll record a new short clip of the ${action.args.concept}. Keep the camera still and move it now.`;

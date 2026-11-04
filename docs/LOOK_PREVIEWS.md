@@ -33,7 +33,7 @@ and under 600 KB, removing metadata before dispatch.
 
 `POST /api/look-preview` requires the existing session cookie, matching origin,
 CSRF token, explicit consent, current epoch, unique request ID and connected key.
-It shares the 100-call session allowance. One image may run alongside one serialized
+It shares the 3000-call session allowance. One image may run alongside one serialized
 conversation/transcription request; a second image and other camera work are blocked. Each attempt
 counts as one dispatch, including provider rejection; there are no automatic retries.
 The image lane has a bounded 120-second timeout. Cancel and session end invalidate

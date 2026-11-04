@@ -34,7 +34,7 @@ test("the built app and neural VAD load under production CSP without eval violat
   });
   await page.routeWebSocket("**/events",()=>{});
   await page.routeWebSocket("**/voice-stream",()=>{});
-  await page.route("**/api/session",route=>route.fulfill({json:{csrf:"test-csrf",phase:"ready",epoch:0,calls:0,limit:100,tokens:0,key:{connected:true,models:["muse-spark-test"]},task:null}}));
+  await page.route("**/api/session",route=>route.fulfill({json:{csrf:"test-csrf",phase:"ready",epoch:0,calls:0,limit:3000,tokens:0,key:{connected:true,models:["muse-spark-test"]},task:null}}));
   await page.route("**/api/diagnostics",route=>route.fulfill({json:{accepted:0}}));
   let providerDispatches=0;
   await page.route("**/api/voice",route=>{providerDispatches++;return route.abort();});

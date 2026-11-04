@@ -28,7 +28,7 @@ it("checks authentication, allowed models, fresh evidence, quota and duplicate I
  await expect(engine.checkCondition(session,input)).rejects.toMatchObject({code:"MODEL_REQUIRED"});await engine.connect(session,"TEST_ONLY_KEY");input.epoch=session.epoch;
  await expect(engine.checkCondition(session,{...input,capturedAt:now-6000})).rejects.toMatchObject({code:"STALE"});
  await expect(engine.checkCondition(session,{...input,model:"other-model"})).rejects.toMatchObject({code:"MODEL_REQUIRED"});
- session.calls=100;await expect(engine.checkCondition(session,input)).rejects.toMatchObject({code:"APP_LIMIT"});expect(calls).toBe(0);
+ session.calls=3000;await expect(engine.checkCondition(session,input)).rejects.toMatchObject({code:"APP_LIMIT"});expect(calls).toBe(0);
  session.calls=0;expect(await engine.checkCondition(session,input)).toMatchObject({verdict:"uncertain",epoch:session.epoch,capturedAt:now});
  await expect(engine.checkCondition(session,input)).rejects.toMatchObject({code:"DUPLICATE"});expect(calls).toBe(1);expect(session.agentHistory).toEqual([]);
 });

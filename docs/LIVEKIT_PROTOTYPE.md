@@ -114,7 +114,7 @@ or provider inference is triggered merely by building the frontend.
 - End session disconnects browser media and requests cloud room deletion. A failed
   cleanup is reported and can be retried. Page exit sends best-effort cleanup;
   crashed browsers still depend on room departure timeouts and worker lifecycle.
-- The existing app's 100-call quota does not cover this independent prototype.
+- The existing app's 3000-call quota does not cover this independent prototype.
   Use the access gate, provider budgets and test duration controls. Do not expose
   this as an unrestricted public service.
 - The prototype does not construct legacy ASR sockets, device speech queues or

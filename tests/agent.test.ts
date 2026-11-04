@@ -370,7 +370,7 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
     ])
       expect(publicLink.safeParse(url).success).toBe(false);
   });
-  it("rejects canceled results and enforces the shared 100-call limit", async () => {
+  it("rejects canceled results and enforces the shared 3000-call limit", async () => {
     let release: (response: Response) => void = () => {};
     const { engine, session } = fixture(
       (() =>
@@ -390,7 +390,12 @@ describe("Muse companion and research contracts (fixtures, no live provider)", (
     release(answer());
     await expect(pending).rejects.toMatchObject({ code: "CANCELED" });
     expect(session.agentHistory).toEqual([]);
-    session.calls = 100;
+    expect(engine.view(session).limit).toBe(3000);
+    session.calls = 2999;
+    const finalAllowed = engine.converse(session, request());
+    release(answer());
+    await finalAllowed;
+    expect(session.calls).toBe(3000);
     await expect(engine.converse(session, request())).rejects.toMatchObject({
       code: "APP_LIMIT",
     });

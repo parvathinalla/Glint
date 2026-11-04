@@ -47,6 +47,13 @@ export const observeInput = z.object({
   requestId: z.string().uuid(),
   events: z.array(visualEvent).max(4).optional(),
 });
+export const activityInput=observeInput.extend({
+  frames:z.array(videoFrame).min(1).max(4),
+  goal:z.string().trim().min(3).max(600),
+  checkpoints:z.array(z.string().trim().min(1).max(120)).max(24).default([]),
+  nextIndex:z.number().int().min(0).max(23).default(0),
+  previous:observationSchema.optional(),
+});
 export const agentInput = z
   .object({
     question: z.string().trim().min(1).max(2000),

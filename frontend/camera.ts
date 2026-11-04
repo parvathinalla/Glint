@@ -256,3 +256,19 @@ export function asDataUrl(blob: Blob): Promise<string> {
     r.readAsDataURL(blob);
   });
 }
+
+/** Compact, ordered samples for explicit activity sessions on slower uplinks. */
+export async function compactActivityFrames(frames:Frame[]):Promise<VideoFrame[]>{
+  return Promise.all(frames.slice(-4).map(async frame=>{
+    const bitmap=await createImageBitmap(frame.blob);
+    try{
+      const canvas=document.createElement("canvas"),scale=Math.min(1,384/Math.max(bitmap.width,bitmap.height));
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      const ctx=canvas.getContext("2d");if(!ctx)throw Error("Camera encoding unavailable.");
+      ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+      const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,"image/jpeg",.45));
+      if(!blob||blob.size>60000)throw Error("Camera sample is too large. Try a steadier view.");
+      return {image:await asDataUrl(blob),capturedAt:frame.at};
+    }finally{bitmap.close();}
+  }));
+}

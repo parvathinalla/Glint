@@ -102,7 +102,7 @@ SAM does not run automatically whenever the camera opens. It analyzes a newly re
 | --- | --- |
 | Camera frames, audio, generated images | Transient browser/server request or session memory; relevant media is sent to the selected external provider |
 | Meta key | Server session memory; 15-minute idle / two-hour absolute lease; restart requires reconnect |
-| Conversation, active jobs, call allowance | In-memory engine state; 100 dispatches per session; current session capacity 200 |
+| Conversation, active jobs, call allowance | In-memory engine state; 3000 dispatches per session; current session capacity 200 |
 | Reviewed task progress | SQLite only when opted in; seven-day expiry; excludes keys, conversations and media |
 | UI preferences | Browser localStorage; Start Glint entry state uses sessionStorage |
 | Diagnostic trace | Bounded content-free browser/server event buffers, timings, IDs and status; structured server logs |

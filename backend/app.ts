@@ -6,7 +6,7 @@ import { randomUUID,timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { Engine, type Session } from "./engine.ts";
 import { Problem } from "./provider.ts";
-import { agentInput, observeInput } from "../shared/agent.ts";
+import { agentInput, observeInput, activityInput } from "../shared/agent.ts";
 import { TtsStream } from "./tts-stream.ts";
 import { getServerVoice } from "./tts-kokoro.ts";
 import { trackInput } from "../shared/object-motion.ts";
@@ -369,6 +369,12 @@ export function createApp(engine: Engine, origin: string, production = false, li
     const input=conditionInput.parse(req.body),session=s(res);validateCameraImage(input.photo);
     res.on("close",()=>{if(!res.writableEnded&&session.seen.has(input.requestId)&&session.epoch===input.epoch)engine.phase(session,"paused");});
     res.json(await engine.checkCondition(session,input));
+  });
+  app.post("/api/activity-check",async(req,res)=>{
+    const input=activityInput.parse(req.body),session=s(res);
+    input.frames.forEach(frame=>validateCameraImage(frame.image,90000));
+    res.on("close",()=>{if(!res.writableEnded&&session.requestId===input.requestId)engine.cancelConversationRequest(session,input.requestId);});
+    res.json(await engine.checkActivity(session,input));
   });
   app.post("/api/observe", async (req, res) => {
     const input = observeInput.parse(req.body);

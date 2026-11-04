@@ -66,7 +66,7 @@ it("uses session auth, deduplication and quota without storing photo bytes in hi
   expect((await engine.previewLook(session,input)).image).toContain("data:image/png");
   expect(session.calls).toBe(1);expect(session.agentHistory).toEqual([]);
   await expect(engine.previewLook(session,input)).rejects.toMatchObject({code:"DUPLICATE"});
-  session.calls=100;
+  session.calls=3000;
   await expect(engine.previewLook(session,{...input,requestId:randomUUID()})).rejects.toMatchObject({code:"APP_LIMIT"});
   expect(calls).toBe(1);
 });

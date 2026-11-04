@@ -34,7 +34,7 @@ it("cancels stale tracking and rejects quota or invalid clips before dispatch",a
   class DelayedSam extends SamProvider { override async track(){calls++;await new Promise<void>(resolve=>{release=resolve;});return summarizeMotion([]);} }
   const {engine,session}=setup(new DelayedSam());
   await engine.connect(session,"TEST_ONLY_KEY");
-  session.calls=100;
+  session.calls=3000;
   await expect(engine.trackMotion(session,input(session.epoch))).rejects.toMatchObject({code:"APP_LIMIT"});
   expect(calls).toBe(0);session.calls=0;
   await expect(engine.trackMotion(session,{...input(session.epoch),clip:"https://invalid.example/clip"})).rejects.toMatchObject({code:"TRACK_CLIP"});

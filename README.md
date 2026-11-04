@@ -127,7 +127,7 @@ The badge reports committed main, not an unpushed working tree. Local checks pas
 - Most inference shares a bounded session lane. The design's fully independent vision/voice scheduling is incomplete.
 - SAM analyzes a new short MP4 clip; it does not recover past actions or compensate for camera motion. Account entitlement and browser format support must be checked.
 - Submission mode does not automatically upload a WAV recording if live transcription fails. It shows a retry/text-input notice. The regular experimental profile retains recording recovery.
-- Sessions are private device sessions, not managed accounts. Restart loses active state and requires reconnecting the key. The request allowance is not a monetary cost governor.
+- Sessions are private device sessions, not managed accounts. Restart loses active state and requires reconnecting the key. The session allowance is 3000 provider dispatches; it is not a monetary cost governor.
 - Performance targets in the design are targets, not achieved measurements. A laptop tunnel is temporary hosting.
 
 ## Roadmap — not shipped

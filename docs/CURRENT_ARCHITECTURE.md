@@ -42,7 +42,7 @@ Source review: 3 November 2026. Historical diagrams may show earlier voice backe
 
 Raw provider keys live in server memory only, with fifteen-minute idle and two-hour absolute expiry. Optional SQLite persistence includes reviewed task/source/progress data, not keys, chat or images. Browser localStorage does contain UI preferences (legacy saved voiceprints are ignored); this is separate from provider-key handling.
 
-The current engine constant is **100 provider dispatches per session**, superseding the historical 40-call allowance. This is an application allowance, not a monetary spending cap. Sessions are local cookie sessions, not managed account authentication. Development binds to loopback; production binds to 0.0.0.0 by default and requires an HTTPS origin. See PRODUCTION_RENDER.md for deployment requirements.
+The current engine constant is **3000 provider dispatches per session**, superseding the historical 40-call allowance. This is an application allowance, not a monetary spending cap. Sessions are local cookie sessions, not managed account authentication. Development binds to loopback; production binds to 0.0.0.0 by default and requires an HTTPS origin. See PRODUCTION_RENDER.md for deployment requirements.
 
 Managed auth, PostgreSQL, object storage, continuous tracking, Docling, Rive and GPU hosting remain proposals or candidates. LiveKit Inference TTS is implemented in the main app; the optional `/livekit` room agent remains a separate comparison flow. An experimental user-triggered SAM recorded-clip path is implemented; it is not a persistent cross-clip tracker. The unused `three` dependency was removed. Earlier architecture illustrations predate some of these changes; see `OBJECT_TRACKING.md` for tracking boundaries.
 

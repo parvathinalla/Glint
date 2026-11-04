@@ -184,7 +184,7 @@ describe("key lifecycle and dispatch", () => {
       code: "STALE",
     });
     expect(infer).toHaveBeenCalledTimes(1);
-    s.calls = 100;
+    s.calls = 3000;
     await expect(e.respond(s, input(s, "live"), true)).rejects.toMatchObject({
       code: "APP_LIMIT",
     });
@@ -378,7 +378,7 @@ describe("streaming voice lane", () => {
         closed: () => {},
       }),
     ).toThrowError(expect.objectContaining({ code: "DUPLICATE" }));
-    t.s.calls = 100;
+    t.s.calls = 3000;
     expect(() => t.open()).toThrowError(
       expect.objectContaining({ code: "APP_LIMIT" }),
     );
@@ -431,7 +431,7 @@ describe("streaming voice lane", () => {
     await t.e.connect(t.s, "TEST_ONLY_KEY");
     t.open();
     t.ack();
-    t.s.calls = 100;
+    t.s.calls = 3000;
     t.sockets[0].onmessage!({
       data: JSON.stringify({ type: "transcript", transcript: "go", final: true }),
     });
@@ -464,7 +464,7 @@ describe("streaming voice lane", () => {
 
 it("explicitly resets the call allowance and drops the key and prior conversation",async()=>{
  const e=create(),s=e.session().session;await e.connect(s,"TEST_ONLY_KEY");
- s.calls=100;s.tokens=200;s.agentHistory=[{role:"user",content:"old conversation"}];
+ s.calls=3000;s.tokens=200;s.agentHistory=[{role:"user",content:"old conversation"}];
  s.seen.add("old-request");const oldEpoch=s.epoch;
  const view=e.resetCallSession(s);
  expect(view.calls).toBe(0);expect(view.key.connected).toBe(false);
