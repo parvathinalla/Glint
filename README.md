@@ -113,20 +113,13 @@ npm test
 
 The published test receipt records 355 unit/integration tests. Tests use fixtures and synthetic media; they do not establish live accuracy. Browser tests run separately with `npm run test:e2e`. Additional checks: `npm run lint` and `npm run build:submission`.
 
-[![Production checks](https://github.com/parvathinalla/Glint/actions/workflows/production-check.yml/badge.svg?branch=main)](https://github.com/parvathinalla/Glint/actions/workflows/production-check.yml)
+## Limitations
 
-The badge reports committed main, not an unpushed working tree. Local checks passed during this audit; the final commit must pass CI again.
-
-## Known limitations
-
-- The full provenance Evidence Store, cross-clip object registry and priority Speech Arbiter are design targets. Current checkpoint steps distinguish pending from user-reported; this is narrower than the design.
-- The camera does not establish unseen actions, ingredient contents, safe doneness or other safety-critical conditions.
-- Background speech can interrupt. There is no speaker-identity guarantee.
-- Most inference shares a bounded session lane. The design's fully independent vision/voice scheduling is incomplete.
-- SAM analyzes a new short MP4 clip; it does not recover past actions or compensate for camera motion. Account entitlement and browser format support must be checked.
-- Submission mode does not automatically upload a WAV recording if live transcription fails. It shows a retry/text-input notice. The regular experimental profile retains recording recovery.
-- Sessions are private device sessions, not managed accounts. Restart loses active state and requires reconnecting the key. The session allowance is 3000 provider dispatches; it is not a monetary cost governor.
-- Performance targets in the design are targets, not achieved measurements. A laptop tunnel is temporary hosting.
+- Glint can miss actions or details that the camera does not clearly capture.
+- Background voices may interrupt the conversation.
+- Memory stays within the session; restarting clears the active context.
+- Tracking can miss movements, and short clips cannot explain what happened before recording.
+- The Cloudflare demo link works only while the laptop server and tunnel are running.
 
 ## License and documentation
 
