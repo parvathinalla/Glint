@@ -4,8 +4,8 @@
 
 - [x] Track: Indie Developer.
 - [x] Theme: Build for Your World.
-- [ ] Public video: [DEMO VIDEO URL]. Entrant confirms it is not recorded yet. Export under three minutes and verify signed out.
-- [ ] Live URL, if used: [LIVE DEMO URL]. Temporary tunnel availability is not permanence.
+- [x] Final demo supplied: [Watch Glint Demo](https://youtu.be/LNRBw1rmBLQ).
+- No permanent live deployment is listed. See the README for local setup.
 - [x] User-confirmed unit headline: 355 unit/integration tests passed (`npm test`). Run npm test, paste final summary and commit SHA. If advertising a combined headline total, supply complete unit and e2e outputs for the same revision and define the sum once; never add spec files to tests.
 - [ ] Main Spark model ID and receipts for every claimed model.
 - [ ] Real salt uncertainty answer and one honest negative result.

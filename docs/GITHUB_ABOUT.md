@@ -22,10 +22,10 @@ The conditional description is under 160 characters. The entrant-supplied track 
 
 ## Links
 
-Homepage: [LIVE DEMO URL]
-Demo video, linked from README and portal: [DEMO VIDEO URL]
+Homepage: https://youtu.be/LNRBw1rmBLQ
+Demo video: https://youtu.be/LNRBw1rmBLQ
 
-GitHub has one homepage field. Use the live app there once checked; do not concatenate two URLs. Do not present an expiring tunnel as permanent production hosting.
+Use the demo video as the homepage until a permanent live app is available.
 
 Verified metadata: public repo created 2026-10-29T00:09:27Z. This date is within the supplied eligibility window. About fields were empty at review. Set them manually after the blockers above are resolved.
 

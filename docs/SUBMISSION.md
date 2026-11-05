@@ -31,7 +31,7 @@ Muse Image and partner-configurable comparison agents are outside this submissio
 | Team | Parvathi Nalla, solo |
 | Repo URL | https://github.com/parvathinalla/Glint |
 | Demo video URL | https://youtu.be/LNRBw1rmBLQ |
-| Live demo URL | [LIVE DEMO URL] |
+| Live demo URL | No permanent deployment; local setup is in README |
 | Verified test total | 355 unit/integration tests passed (`npm test`) |
 
 ## How you used Meta's models
