@@ -11,7 +11,7 @@ Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, ins
 
 [![Watch the Glint demo on YouTube](https://img.youtube.com/vi/LNRBw1rmBLQ/hqdefault.jpg)](https://youtu.be/LNRBw1rmBLQ)
 
-[**▶ Watch the Glint demo on YouTube**](https://youtu.be/LNRBw1rmBLQ) — no download needed.
+[**▶ Watch the Glint demo on YouTube**](https://youtu.be/LNRBw1rmBLQ)
 
 [Download the MP4](docs/media/Glint-Demo.mp4)
 
