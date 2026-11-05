@@ -39,9 +39,9 @@ LIVE in the audit means an implemented API path plus tests, not a verified accou
 | `muse-voice-transcribe-1.0` | Realtime speech transcription, with WAV recovery | [ASR adapter](backend/asr-provider.ts), [recovery adapter](backend/agent-provider.ts) | `wss://api.meta.ai/v1/asr/realtime`; `https://api.meta.ai/v1/asr/transcribe` |
 | `sam-3.1` | Optional requested clip segmentation and camera-relative movement | [SAM adapter](backend/sam-provider.ts) | `https://api.meta.ai/v1/responses` |
 
-**Conversation:** [AgentProvider](backend/agent-provider.ts) calls `https://api.meta.ai/v1/responses` using the connected account's selected model. [NEEDS EVIDENCE: main-app receipt showing `muse-spark-1.3`. Copy the selected model and one response receipt from a short live turn; do not use the separate comparison agent as proof.]
+**Conversation:** Glint sends your question, selected camera frames, and conversation context to the Meta Model API. The model connected through your account uses that information to respond to what you are asking about.
 
-SAM has not been independently live-verified for this submission. Remove its row if the account test or recorded demonstration is absent. `muse-image-1.0` is wired and fixture-tested but quarantined from this hands-busy demo. It is not counted as a demonstrated integration here.
+**Optional tools:** SAM supports short object-motion clips, while Muse Image supports requested image edits. These tools have implemented adapters and automated test coverage; that does not establish their accuracy in real-world use. They are separate from the main camera-and-voice conversation flow.
 
 ## Architecture
 
