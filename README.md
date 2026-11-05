@@ -98,16 +98,6 @@ Open [the local app](http://127.0.0.1:3100). The labelled submission banner iden
 
 Server secrets, if used for experiments, belong in ignored environment files. No server-side Meta key is needed for the main submission. Browser voice availability and quality depend on the device. Build and serve the same profile with `npm run build:submission` and `npm run start:submission`; production requires an HTTPS application origin.
 
-## Salt example: required behavior, not a verified demo result
-
-1. Observed: the small bowl moved over the pot and tilted.
-2. Not observed: the contents of the bowl entering the pot.
-3. Inferred: an ingredient may have been added; salt is not confirmed.
-4. User-reported or source-derived information must remain attributed separately.
-5. Reply: “I saw the bowl tilt, but couldn't see its contents. I can't confirm the salt. Taste before adding more, if appropriate.”
-
-[NEEDS EVIDENCE: record this exact uncertainty behavior in one live run. If it fails, show the failure and remove factual ingredient-memory claims.]
-
 ## Verification
 
 **Verified test total:** 355 unit/integration tests passed (`npm test`)
