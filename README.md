@@ -123,7 +123,7 @@ The published test receipt records 355 unit/integration tests. Tests use fixture
 
 ## License and documentation
 
-Project code: [MIT](LICENSE). Third-party model assets and media retain their own notices; the MIT license does not relicense them. [NEEDS EVIDENCE: rights and event-window provenance for the supplied avatar video. Confirm its source and permission in under ten minutes.]
+Project code: [MIT](LICENSE). Third-party model assets and media retain their own notices; the MIT license does not relicense them.
 
 [Read the Glint design document](docs/GLINT_DESIGN_DOCUMENT.md).
 
