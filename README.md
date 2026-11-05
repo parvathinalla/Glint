@@ -15,15 +15,6 @@ Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, ins
 
 [Download the MP4](docs/media/Glint-Demo.mp4)
 
-### More Glint videos
-
-Additional Glint recordings will be added here.
-
-<!-- Add each uploaded clip below using this format:
-- [Short descriptive video title](docs/media/your-video.mp4)
-YouTube links can be used instead of repository files.
--->
-
 ## Problem
 
 Cooking, assembly and crafts occupy your hands. Asking for help should not require repeatedly typing or describing the scene. Camera evidence is incomplete, however. Seeing a bowl tilt does not prove what was in it.
@@ -151,3 +142,12 @@ We will implement the full provenance schema, conflicting-claim history and evid
 Project code: [MIT](LICENSE). Third-party model assets and media retain their own notices; the MIT license does not relicense them. [NEEDS EVIDENCE: rights and event-window provenance for the supplied avatar video. Confirm its source and permission in under ten minutes.]
 
 [Read the docs in order](docs/README.md). Previous README material was moved intact to [build-log.md](docs/build-log.md), including its historical claims and conflicts.
+
+### More Glint videos
+
+Additional Glint recordings will be added here.
+
+<!-- Add each uploaded clip below using this format:
+- [Short descriptive video title](docs/media/your-video.mp4)
+YouTube links can be used instead of repository files.
+-->
