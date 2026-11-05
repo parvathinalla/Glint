@@ -136,7 +136,7 @@ Project code: [MIT](LICENSE). Third-party model assets and media retain their ow
 
 ### More Glint videos
 
-- [Watch an additional Glint demo · YouTube Shorts](https://youtube.com/shorts/_PriTMS5uUQ?feature=share)
+[![Watch an additional Glint demo on YouTube Shorts](https://img.youtube.com/vi/_PriTMS5uUQ/hqdefault.jpg)](https://youtube.com/shorts/_PriTMS5uUQ?feature=share)
 
 <!-- Add each uploaded clip below using this format:
 - [Short descriptive video title](media/your-video.mp4)
