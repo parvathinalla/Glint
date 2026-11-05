@@ -91,12 +91,6 @@ Open [http://127.0.0.1:3100](http://127.0.0.1:3100). Connect your Meta Model API
 
 ### Phone testing with Cloudflare Tunnel
 
-On Windows, with `cloudflared` installed, the included script builds Glint, starts the server, and creates a temporary HTTPS link:
-
-```powershell
-powershell -NoProfile -File scripts/start-monitored.ps1
-```
-
 Open the generated `https://…trycloudflare.com` link on your phone and allow camera/microphone access when you choose to use them. The link is recorded in `.data/managed/state.json`. Keep the laptop, server and tunnel running while testing. The link is temporary and can change on restart.
 
 ### Separate submission profile
