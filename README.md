@@ -72,31 +72,36 @@ The gateway relays transcription calls; the diagram's PCM edge is a logical data
 - `shared/`: types and contracts used by both.
 - `tests/`: unit/integration and Playwright suites.
 
-## Run locally
+## Run Glint
 
-Requires Node 24 LTS, npm and network access for dependencies/model assets. No Docker, GPU, Redis or cloud account is needed to open the labelled fixture replay. Live inference requires a Meta key entered through the app. Clean macOS/Linux installation remains [NEEDS EVIDENCE: run these commands on a clean machine and retain the output; start the check in under ten minutes].
+Glint runs on a local Node server. During testing, we used **Cloudflare Tunnel** to open that server through an HTTPS link on phones and other devices. Cloudflare provides access to the running app; the server still runs on the laptop.
 
-macOS/Linux:
+### Local development
+
+Requires Node.js 24 and npm.
 
 ```bash
 git clone https://github.com/parvathinalla/Glint.git
 cd Glint
 npm ci
-npm run dev:submission
+npm run dev
 ```
 
-Windows PowerShell:
+Open [http://127.0.0.1:3100](http://127.0.0.1:3100). Connect your Meta Model API key through the app. For LiveKit speech, configure the LiveKit settings from [.env.example](.env.example) in an ignored `.env.local` file. Keep API keys out of GitHub.
+
+### Phone testing with Cloudflare Tunnel
+
+On Windows, with `cloudflared` installed, the included script builds Glint, starts the server, and creates a temporary HTTPS link:
 
 ```powershell
-git clone https://github.com/parvathinalla/Glint.git
-cd Glint
-npm ci
-npm run dev:submission
+powershell -NoProfile -File scripts/start-monitored.ps1
 ```
 
-Open [the local app](http://127.0.0.1:3100). The labelled submission banner identifies browser speech and pose-off mode. Choose **Open fixture replay · no key, no AI inference** for the existing organizer example. It is not a live model demonstration. The main camera-and-voice flow needs a connected key. See the [60-second walkthrough](docs/JUDGE_PATH_AND_FIXES.md).
+Open the generated `https://…trycloudflare.com` link on your phone and allow camera/microphone access when you choose to use them. The link is recorded in `.data/managed/state.json`. Keep the laptop, server and tunnel running while testing. The link is temporary and can change on restart.
 
-Server secrets, if used for experiments, belong in ignored environment files. No server-side Meta key is needed for the main submission. Browser voice availability and quality depend on the device. Build and serve the same profile with `npm run build:submission` and `npm run start:submission`; production requires an HTTPS application origin.
+### Separate submission profile
+
+`npm run dev:submission` starts the restricted submission profile: browser speech, pose inference disabled, and an optional labelled fixture replay. It differs from the regular app used for LiveKit and activity-tracking tests.
 
 ## Verification
 
