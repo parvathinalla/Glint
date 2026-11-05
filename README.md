@@ -123,10 +123,6 @@ The badge reports committed main, not an unpushed working tree. Local checks pas
 - Sessions are private device sessions, not managed accounts. Restart loses active state and requires reconnecting the key. The session allowance is 3000 provider dispatches; it is not a monetary cost governor.
 - Performance targets in the design are targets, not achieved measurements. A laptop tunnel is temporary hosting.
 
-## Roadmap — not shipped
-
-We will implement the full provenance schema, conflicting-claim history and evidence-linked task memory. We will qualify independent voice/vision scheduling, calibrated temporal understanding, a complete priority speech arbiter and budget-aware admission. Managed auth, PostgreSQL, durable jobs and cross-clip identity tracking will require separate implementation and validation. Optional design models such as Muse Wonder will remain off until justified by measurements.
-
 ## License and documentation
 
 Project code: [MIT](LICENSE). Third-party model assets and media retain their own notices; the MIT license does not relicense them. [NEEDS EVIDENCE: rights and event-window provenance for the supplied avatar video. Confirm its source and permission in under ten minutes.]
