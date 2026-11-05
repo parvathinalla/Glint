@@ -1,6 +1,8 @@
 # Glint videos
 
-[Final demo](Glint-Demo.mp4)
+[Watch the final demo on YouTube](https://youtu.be/LNRBw1rmBLQ)
+
+[Download the MP4](Glint-Demo.mp4)
 
 To add another recording:
 

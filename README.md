@@ -9,9 +9,11 @@ Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, ins
 
 ## Demo
 
-[**Watch / download the final Glint demo**](https://github.com/parvathinalla/Glint/raw/refs/heads/main/docs/media/Glint-Demo.mp4)
+[![Watch the Glint demo on YouTube](https://img.youtube.com/vi/LNRBw1rmBLQ/hqdefault.jpg)](https://youtu.be/LNRBw1rmBLQ)
 
-The final recording is included in this repository as [Glint-Demo.mp4](docs/media/Glint-Demo.mp4). If GitHub shows a large-file notice, use **View raw** or the download link above.
+[**▶ Watch the Glint demo on YouTube**](https://youtu.be/LNRBw1rmBLQ) — no download needed.
+
+[Download the MP4](docs/media/Glint-Demo.mp4)
 
 ### More Glint videos
 
