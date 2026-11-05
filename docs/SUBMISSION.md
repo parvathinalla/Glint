@@ -1,6 +1,6 @@
 # Task 4: Glint submission draft
 
-Demo video status: not recorded yet, confirmed by entrant.
+Final demo recording: [watch / download Glint Demo](https://github.com/parvathinalla/Glint/raw/refs/heads/main/docs/media/Glint-Demo.mp4). Supplied by the entrant on Nov 4, 2026.
 
 DRAFT. Do not submit until the public video and live receipts replace the remaining placeholders. Present-tense demo claims require footage. This draft does not certify stage-one eligibility.
 
@@ -30,7 +30,7 @@ Muse Image and partner-configurable comparison agents are outside this submissio
 | Theme | Build for Your World |
 | Team | Parvathi Nalla, solo |
 | Repo URL | https://github.com/parvathinalla/Glint |
-| Demo video URL | [DEMO VIDEO URL] |
+| Demo video URL | https://github.com/parvathinalla/Glint/raw/refs/heads/main/docs/media/Glint-Demo.mp4 |
 | Live demo URL | [LIVE DEMO URL] |
 | Verified test total | 355 unit/integration tests passed (`npm test`) |
 

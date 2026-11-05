@@ -7,10 +7,11 @@ Glint helps people keep their hands on a task while asking for guidance about wh
 **Theme:** Build for Your World
 Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, inside the event window; available commit history starts Oct 28. Asset provenance still requires review.
 
-**Watch:** [DEMO VIDEO URL] · **Try:** [LIVE DEMO URL]
-[INSERT: avatar + camera screenshot]
+## Demo
 
-[NEEDS EVIDENCE: public video under three minutes and a signed-out live-link check. Obtain each in under ten minutes by uploading the final recording and testing both URLs in a private window.]
+[**Watch / download the final Glint demo**](https://github.com/parvathinalla/Glint/raw/refs/heads/main/docs/media/Glint-Demo.mp4)
+
+The final recording is included in this repository as [Glint-Demo.mp4](docs/media/Glint-Demo.mp4). If GitHub shows a large-file notice, use **View raw** or the download link above.
 
 ## Problem
 

@@ -3,7 +3,7 @@
 ## Read in this order
 
 1. [Approved design](GLINT_DESIGN_DOCUMENT.md). Canonical requirements, not proof that every component ships.
-2. [Submission draft](SUBMISSION.md). Track is confirmed; the public video is not recorded yet.
+2. [Submission draft](SUBMISSION.md). Track is confirmed; the final demo recording is linked.
 3. [Scope audit](SUBMISSION_AUDIT.md). Runtime evidence and contradictions, including design gaps.
 4. [Live verification worksheet](LIVE_VERIFICATION.md). One real run, no fabricated metrics.
 5. [Judge path and ranked fixes](JUDGE_PATH_AND_FIXES.md). Explicit fixture versus real inference.
