@@ -13,7 +13,7 @@ Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, ins
 
 [**▶ Watch the Glint demo on YouTube**](https://youtu.be/LNRBw1rmBLQ)
 
-[Download the MP4](docs/media/Glint-Demo.mp4)
+[Download the MP4](media/Glint-Demo.mp4)
 
 ## Problem
 
@@ -28,11 +28,11 @@ Cooking, assembly and crafts occupy your hands. Asking for help should not requi
 
 **Submission profile:** Meta Model API + browser speech. Partner-hosted generative inference and external TTS are not used by this profile, by choice. Local Silero VAD detects speech boundaries; pose inference is disabled. The normal development profile still contains experimental speech providers and image previews. Use the explicit commands below for the submission.
 
-Full provenance memory is the core design, not a claim of complete shipped implementation. [Approved design](docs/GLINT_DESIGN_DOCUMENT.md) defines the five categories: observed, user-reported, inferred, source-derived and model-general. [Scope audit](docs/SUBMISSION_AUDIT.md) records the gaps.
+Full provenance memory is the core design, not a claim of complete shipped implementation. [Approved design](docs/GLINT_DESIGN_DOCUMENT.md) defines the five categories: observed, user-reported, inferred, source-derived and model-general.
 
 ## Meta models and runtime evidence
 
-LIVE in the audit means an implemented API path plus tests, not a verified account receipt. Keep a row in the final submission only after it appears in the recorded demo and its receipt is filled in [LIVE_VERIFICATION](docs/LIVE_VERIFICATION.md).
+The adapters below connect Glint to Meta models. Automated tests cover the API paths; they do not establish live accuracy.
 
 | Model ID | Job | Code | Endpoint |
 | --- | --- | --- | --- |
@@ -111,7 +111,7 @@ Open the generated `https://…trycloudflare.com` link on your phone and allow c
 npm test
 ```
 
-Entrant supplied the final unit summary on Nov 3: 355 passed. The initial browser run reported 73 passed and 2 failed. After the documented repairs, the full browser rerun passed; see the separate browser receipt in [TEST_EVIDENCE](docs/TEST_EVIDENCE.md). The original failed run remains in the receipt. Record the final commit SHA and require CI on that revision. Browser tests are a separate suite: `npx playwright install chromium`, then `npm run test:e2e`. Never add spec-file counts to passed-test totals. Tests use fixtures and synthetic media; they do not establish live accuracy. Additional checks: `npm run lint` and `npm run build:submission`.
+The published test receipt records 355 unit/integration tests. Tests use fixtures and synthetic media; they do not establish live accuracy. Browser tests run separately with `npm run test:e2e`. Additional checks: `npm run lint` and `npm run build:submission`.
 
 [![Production checks](https://github.com/parvathinalla/Glint/actions/workflows/production-check.yml/badge.svg?branch=main)](https://github.com/parvathinalla/Glint/actions/workflows/production-check.yml)
 
@@ -132,13 +132,13 @@ The badge reports committed main, not an unpushed working tree. Local checks pas
 
 Project code: [MIT](LICENSE). Third-party model assets and media retain their own notices; the MIT license does not relicense them. [NEEDS EVIDENCE: rights and event-window provenance for the supplied avatar video. Confirm its source and permission in under ten minutes.]
 
-[Read the docs in order](docs/README.md). Previous README material was moved intact to [build-log.md](docs/build-log.md), including its historical claims and conflicts.
+[Read the Glint design document](docs/GLINT_DESIGN_DOCUMENT.md).
 
 ### More Glint videos
 
 Additional Glint recordings will be added here.
 
 <!-- Add each uploaded clip below using this format:
-- [Short descriptive video title](docs/media/your-video.mp4)
+- [Short descriptive video title](media/your-video.mp4)
 YouTube links can be used instead of repository files.
 -->

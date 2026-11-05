@@ -83,7 +83,7 @@ export default function LiveKitPrototype(){
     <p>This is a separate Glint voice agent. It does not run the main Glint camera/image task engine.</p>
     {models&&<p>Conversation model: {models.llm} via {models.provider}. Speech recognition: {models.stt}. Voice: {models.tts}.</p>}
     <p>Joining sends microphone audio to LiveKit and the configured AI providers. Provider usage may incur charges. Transcripts below stay in this page; app recording is disabled.</p>
-    {ready===false&&<p role="status">LiveKit is not configured. Follow docs/LIVEKIT_PROTOTYPE.md, then restart the app.</p>}
+    {ready===false&&<p role="status">LiveKit is not configured. Configure the LiveKit settings in .env.example, then restart the app.</p>}
     {ready&&<><label>Prototype access code<input type="password" autoComplete="off" value={code} disabled={joining||connected} onChange={event=>setCode(event.target.value)}/></label>
       <button disabled={!csrf||!code||joining||connected} onClick={()=>void join()}>Join voice prototype</button></>}
     <p role="status">Connection: {state} · Agent: {agent}</p>

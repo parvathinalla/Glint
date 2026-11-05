@@ -1,6 +1,6 @@
 # Glint next milestones
 
-Architecture roadmap: [real-time multimodal task companion](docs/GLINT_REALTIME_ARCHITECTURE_PLAN.md). This proposed roadmap supersedes older recommendations where they conflict; implementation and live qualification remain separate gates.
+Architecture roadmap: [real-time multimodal task companion](docs/GLINT_DESIGN_DOCUMENT.md). This proposed roadmap supersedes older recommendations where they conflict; implementation and live qualification remain separate gates.
 
 ## Reviewable local slice
 
