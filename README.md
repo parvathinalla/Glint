@@ -13,6 +13,15 @@ Built during the hackathon, Oct 27–Nov 4, 2026. Repository created Oct 29, ins
 
 The final recording is included in this repository as [Glint-Demo.mp4](docs/media/Glint-Demo.mp4). If GitHub shows a large-file notice, use **View raw** or the download link above.
 
+### More Glint videos
+
+Additional Glint recordings will be added here.
+
+<!-- Add each uploaded clip below using this format:
+- [Short descriptive video title](docs/media/your-video.mp4)
+YouTube links can be used instead of repository files.
+-->
+
 ## Problem
 
 Cooking, assembly and crafts occupy your hands. Asking for help should not require repeatedly typing or describing the scene. Camera evidence is incomplete, however. Seeing a bowl tilt does not prove what was in it.
